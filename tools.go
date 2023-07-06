@@ -103,6 +103,11 @@ func generateUniqueFilename() (string, error) {
 	return uuid, nil
 }
 
+// saveByURL is a function that saves images from a list of URLs to the
+// specified path on the local filesystem. It takes the path to save the
+// images, the number of parallel tasks to execute, and a slice of URLs
+// as input.
+// It returns an error if there was any issue during the process.
 func saveByURL(path string, parallelTasks int, items []string) error {
 	var wg sync.WaitGroup
 	var errors []error
@@ -168,6 +173,11 @@ func saveByURL(path string, parallelTasks int, items []string) error {
 	return nil
 }
 
+// saveByBase64 is a function that saves images from a list of
+// base64-encoded strings to the specified path on the local filesystem.
+// It takes the path to save the images, the number of parallel
+// tasks to execute, and a slice of base64-encoded strings as input.
+// It returns an error if there was any issue during the process.
 func saveByBase64(path string, parallelTasks int, items []string) error {
 	var wg sync.WaitGroup
 	var errors []error
@@ -187,7 +197,7 @@ func saveByBase64(path string, parallelTasks int, items []string) error {
 			// Release token when done.
 			defer func() { <-sem; wg.Done() }()
 
-			// Convert base64 to bytes
+			// Convert base64 to bytes.
 			dec, err := base64.StdEncoding.DecodeString(item)
 			if err != nil {
 				errMutex.Lock()
@@ -204,7 +214,7 @@ func saveByBase64(path string, parallelTasks int, items []string) error {
 				return
 			}
 
-			// Write bytes to file
+			// Write bytes to file.
 			err = ioutil.WriteFile(p, dec, 0o644)
 			if err != nil {
 				errMutex.Lock()
@@ -227,7 +237,8 @@ func saveByBase64(path string, parallelTasks int, items []string) error {
 
 // The urlBuild constructs a URL from a base URL as prefix
 // (like: https://some.site/) and an endpoint (or path parts).
-// The function returns an error as the second value if the URL is invalid.
+// The function returns an error as the second value if the URL
+// is invalid.
 func urlBuild(baseURL string, pathParts ...string) (string, error) {
 	u, err := url.Parse(baseURL)
 	if err != nil {
@@ -245,8 +256,8 @@ func isSuccessfulCode(statusCode int) bool {
 	return statusCode >= http.StatusOK && statusCode < http.StatusBadRequest
 }
 
-// The newJsonRequest creates a new HTTP request instance.
-func newJsonRequest(c Clienter, m, u string, b any) (*http.Request, error) {
+// newJSONRequest creates a new HTTP request instance.
+func newJSONRequest(c Clienter, m, u string, b any) (*http.Request, error) {
 	var body io.Reader
 
 	// Create a request body if it is passed.
@@ -281,6 +292,13 @@ func newJsonRequest(c Clienter, m, u string, b any) (*http.Request, error) {
 	return req, nil
 }
 
+// newDataRequest is a helper function that creates a new
+// multipart/form-data HTTP request.
+// It takes a Clienter interface, HTTP method, URL, and request body as input.
+// It uses reflection to iterate over the fields of the request body and
+// construct the form data. The function supports file uploads by creating
+// form files for *os.File fields. It returns the constructed HTTP request
+// or an error if there was any issue during the process.
 func newDataRequest(c Clienter, m, u string, b any) (*http.Request, error) {
 	body := &bytes.Buffer{}
 	writer := multipart.NewWriter(body)
@@ -322,7 +340,7 @@ func newDataRequest(c Clienter, m, u string, b any) (*http.Request, error) {
 				}
 			}
 		} else {
-			// Check if the field is of type string
+			// Check if the field is of type string.
 			if field.Kind() == reflect.String {
 				err := writer.WriteField(jsonFieldName, field.String())
 				if err != nil {
