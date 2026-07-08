@@ -1,62 +1,110 @@
-[![Go Report Card](https://goreportcard.com/badge/github.com/goloop/openai)](https://goreportcard.com/report/github.com/goloop/openai) [![License](https://img.shields.io/badge/license-MIT-brightgreen)](https://github.com/goloop/openai/blob/master/LICENSE) [![License](https://img.shields.io/badge/godoc-YES-green)](https://godoc.org/github.com/goloop/openai) [![Stay with Ukraine](https://img.shields.io/static/v1?label=Stay%20with&message=Ukraine%20♥&color=ffD700&labelColor=0057B8&style=flat)](https://u24.gov.ua/)
+[![deps.dev](https://img.shields.io/badge/deps.dev-insights-4c8dbc)](https://deps.dev/go/github.com%2Fgoloop%2Fopenai) [![License](https://img.shields.io/badge/license-MIT-brightgreen)](https://github.com/goloop/openai/blob/master/LICENSE) [![License](https://img.shields.io/badge/godoc-YES-green)](https://pkg.go.dev/github.com/goloop/openai) [![Stay with Ukraine](https://img.shields.io/static/v1?label=Stay%20with&message=Ukraine%20♥&color=ffD700&labelColor=0057B8&style=flat)](https://u24.gov.ua/)
 
 
 # openai
 
-Go clients for OpenAI API
+`openai` is a Go client for the OpenAI API. It implements the
+`github.com/goloop/ai` interface, so it looks and works like every other goloop
+AI provider, and exposes OpenAI's native endpoints with their full options on
+top.
 
-**DO NOT USE THIS VERSION IN PRODUCTION, BECAUSE IT IS AN ALPHA VERSION**
+## Features
 
+- Chat completions: `Generate` for a single response, `Stream` for
+  token-by-token output through `iter.Seq2`.
+- Tool use (function calling), multimodal image input and system prompts.
+- Native `ChatCompletion` and `ChatCompletionStream` with the full option set
+  (response_format, seed, n, ...), plus the responses API.
+- Embeddings, image generation, audio (transcription, translation, speech),
+  moderations, models, files and batches.
+- Retries on 429 and 5xx with backoff; normalized, typed API errors.
+- Depends only on `github.com/goloop/ai` and the standard library.
 
-# Examples
+## Installation
 
-Import the appropriate library.
-
-```go
-import "github.com/goloop/openai"
+```sh
+go get github.com/goloop/openai
 ```
 
-# New client
-
-A personal client with default settings in can be quickly created using the New function.
+## Quick start
 
 ```go
-apiKey := "sk-..."
-client := openai.New(apiKey)
+package main
+
+import (
+	"context"
+	"fmt"
+	"os"
+
+	"github.com/goloop/ai"
+	"github.com/goloop/openai"
+)
+
+func main() {
+	c := openai.New(os.Getenv("OPENAI_API_KEY"))
+
+	resp, err := c.Generate(context.Background(), &ai.Request{
+		Model:    openai.ModelGPT4oMini,
+		Messages: []ai.Message{ai.UserText("Say hello in one word.")},
+	})
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println(resp.Text())
+}
 ```
 
-We can also add the Organization ID for the organization's client.
+## Streaming
 
 ```go
-apiKey := "sk-..."
-orgID := "org-..."
-client := openai.New(apiKey, orgID)
+for chunk, err := range c.Stream(ctx, req) {
+	if err != nil {
+		break
+	}
+	fmt.Print(chunk.Text)
+	if chunk.Done && chunk.Usage != nil {
+		fmt.Printf("\n[%d in / %d out]\n",
+			chunk.Usage.InputTokens, chunk.Usage.OutputTokens)
+	}
+}
 ```
 
-We can set our own base URL of API, which can consist of several parts.
+## Tools, images and system prompts
+
+Tools, images and system prompts use the same shared `ai` types as every other
+provider (see the [reference](DOC.md)). For OpenAI-only options such as
+structured output, build a native `ChatRequest`:
 
 ```go
-apiKey := "sk-..."
-orgID := "org-..."
-domain := "example.com"
-v := "v1"
-client := openai.New(apiKey, orgID, "https://", domain, v)
-
-```
-
-The client can be created with advanced configurations.
-
-It is not necessary to specify all possible configuration parameters. Parameters not specified will be defined by default.
-
-```go
-ctx, cancel := context.WithCancel(context.Background())
-defer cancel()
-
-client := openai.New(openai.Config{
-    APIKey:        "sk-...",
-	OrgID:         "org-...",
-    Context:       ctx,
-    ParallelTasks: 8,
+resp, _ := c.ChatCompletion(ctx, &openai.ChatRequest{
+	Model:          openai.ModelGPT4oMini,
+	Messages:       []openai.ChatMessage{{Role: "user", Content: "List two colors as JSON."}},
+	ResponseFormat: json.RawMessage(`{"type":"json_object"}`),
 })
 ```
 
+## Native endpoints
+
+```go
+c.Embed(ctx, "text-embedding-3-small", "hello", "world")
+c.GenerateImage(ctx, &openai.ImageRequest{Model: "gpt-image-1", Prompt: "a cat"})
+c.Transcribe(ctx, &openai.TranscriptionRequest{Model: "whisper-1", File: wav, Filename: "a.wav"})
+c.Speech(ctx, &openai.SpeechRequest{Model: "gpt-4o-mini-tts", Input: "hi", Voice: "alloy"})
+c.Moderate(ctx, "some text")
+c.Models(ctx)
+c.UploadFile(ctx, "in.jsonl", data, "batch")
+c.CreateBatch(ctx, fileID, "/v1/chat/completions", "24h")
+c.CreateResponse(ctx, &openai.ResponsesRequest{Model: "gpt-4o-mini", Input: "hi"})
+```
+
+## Documentation
+
+Full reference: **[DOC.md](DOC.md)** (Ukrainian: **[DOC.UK.md](DOC.UK.md)**).
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md).
+
+## License
+
+MIT - see [LICENSE](LICENSE).

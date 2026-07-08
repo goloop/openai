@@ -1,7 +1,5 @@
 module github.com/goloop/openai
 
-go 1.20
+go 1.24
 
-require github.com/goloop/g v1.10.1
-
-require github.com/goloop/trit v1.7.1 // indirect
+require github.com/goloop/ai v0.1.0

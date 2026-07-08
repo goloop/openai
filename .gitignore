@@ -1,0 +1,4 @@
+# goloop
+.DS_Store
+*.test
+coverage.out

@@ -1,0 +1,210 @@
+# openai - reference
+
+The full reference for the `openai` package: the client, the shared `goloop/ai`
+model, chat completions (interface and native), streaming, the responses API,
+embeddings, images, audio, moderations, models, files and batches.
+
+Ukrainian version: **[DOC.UK.md](DOC.UK.md)**.
+
+## Contents
+
+- [Mental model](#mental-model)
+- [Creating a client](#creating-a-client)
+- [Generate and Stream](#generate-and-stream)
+- [Native chat completions](#native-chat-completions)
+- [Responses API](#responses-api)
+- [Embeddings](#embeddings)
+- [Images](#images)
+- [Audio](#audio)
+- [Moderations](#moderations)
+- [Models](#models)
+- [Files](#files)
+- [Batches](#batches)
+- [Options and errors](#options-and-errors)
+
+## Mental model
+
+`openai.Client` implements `ai.Client`, the provider-agnostic contract from
+`github.com/goloop/ai`. The shared `Generate` and `Stream` cover the common
+ground - chat with tools, images and streaming - so code written against the
+interface runs on any provider.
+
+OpenAI-specific power lives in native methods: the full `ChatCompletion`
+request, the responses API, embeddings, images, audio, moderations, files and
+batches. Those are not part of the shared interface.
+
+```go
+import (
+	"github.com/goloop/ai"
+	"github.com/goloop/openai"
+)
+```
+
+## Creating a client
+
+```go
+c := openai.New(os.Getenv("OPENAI_API_KEY"))
+
+c = openai.New(apiKey,
+	openai.WithOrg("org-..."),
+	openai.WithProject("proj-..."),
+	openai.WithTimeout(30*time.Second),
+)
+```
+
+The base URL defaults to `https://api.openai.com/v1`. Point `WithBaseURL` at any
+OpenAI-compatible endpoint to reuse this client against another gateway.
+
+## Generate and Stream
+
+```go
+resp, err := c.Generate(ctx, &ai.Request{
+	Model:    openai.ModelGPT4oMini,
+	System:   "You are concise.",
+	Messages: []ai.Message{ai.UserText("Name three primary colors.")},
+})
+resp.Text()
+resp.ToolCalls()
+resp.Usage
+```
+
+`Stream` returns `iter.Seq2[ai.Chunk, error]`: text deltas as chunks with
+`Text`, a finished tool call as a chunk with `ToolCall`, and a final chunk with
+`Done` and `Usage`.
+
+```go
+for chunk, err := range c.Stream(ctx, req) {
+	if err != nil {
+		return err
+	}
+	fmt.Print(chunk.Text)
+}
+```
+
+Tool use, images and system prompts use the shared `ai` types: `ai.Tool`,
+`ai.Image`, `ai.ToolResult` and a `RoleSystem` message or the `System` field.
+Tool results are sent back as `RoleTool` messages whose `ai.ToolResult.ID`
+matches the `ai.ToolUse.ID`.
+
+## Native chat completions
+
+For OpenAI-only options build a `ChatRequest` and call `ChatCompletion` or
+`ChatCompletionStream`:
+
+```go
+resp, err := c.ChatCompletion(ctx, &openai.ChatRequest{
+	Model:          openai.ModelGPT4oMini,
+	Messages:       []openai.ChatMessage{{Role: "user", Content: "as JSON"}},
+	ResponseFormat: json.RawMessage(`{"type":"json_object"}`),
+	Seed:           ptr(42),
+})
+```
+
+`ChatMessage.Content` is a string or a slice of content parts; `Tools`,
+`ToolChoice`, `Temperature`, `TopP`, `MaxCompletionTokens`, `Stop`, `N`, `Seed`,
+`ResponseFormat` and `User` are all available.
+
+## Responses API
+
+```go
+resp, err := c.CreateResponse(ctx, &openai.ResponsesRequest{
+	Model:        openai.ModelGPT4oMini,
+	Input:        "Write a haiku about Go.",
+	Instructions: "Be poetic.",
+})
+resp.Text()
+```
+
+## Embeddings
+
+```go
+vecs, err := c.Embed(ctx, "text-embedding-3-small", "hello", "world")
+// or the full request:
+resp, err := c.Embeddings(ctx, &openai.EmbeddingRequest{
+	Model: "text-embedding-3-small", Input: []string{"hello"}, Dimensions: 256,
+})
+```
+
+## Images
+
+```go
+resp, err := c.GenerateImage(ctx, &openai.ImageRequest{
+	Model: "gpt-image-1", Prompt: "a watercolor cat", Size: "1024x1024",
+})
+resp.Data[0].URL // or B64JSON
+```
+
+## Audio
+
+```go
+text, err := c.Transcribe(ctx, &openai.TranscriptionRequest{
+	Model: "whisper-1", File: wav, Filename: "speech.wav",
+})
+text, err = c.Translate(ctx, &openai.TranscriptionRequest{
+	Model: "whisper-1", File: wav, Filename: "speech.wav",
+})
+audio, err := c.Speech(ctx, &openai.SpeechRequest{
+	Model: "gpt-4o-mini-tts", Input: "Hello", Voice: "alloy",
+})
+```
+
+`Speech` returns the raw audio bytes.
+
+## Moderations
+
+```go
+res, err := c.Moderate(ctx, "some text")
+res.Flagged
+res.Categories     // map[string]bool
+res.CategoryScores // map[string]float64
+```
+
+## Models
+
+```go
+models, err := c.Models(ctx)
+m, err := c.GetModel(ctx, openai.ModelGPT4o)
+```
+
+## Files
+
+```go
+f, err := c.UploadFile(ctx, "input.jsonl", data, "batch")
+files, err := c.Files(ctx)
+f, err = c.GetFile(ctx, f.ID)
+data, err := c.FileContent(ctx, f.ID)
+err = c.DeleteFile(ctx, f.ID)
+```
+
+## Batches
+
+Upload a JSONL file of requests, then run it against an endpoint:
+
+```go
+in, _ := c.UploadFile(ctx, "batch.jsonl", jsonl, "batch")
+b, err := c.CreateBatch(ctx, in.ID, "/v1/chat/completions", "24h")
+b, err = c.GetBatch(ctx, b.ID)            // poll b.Status
+// results are in the file b.OutputFileID:
+out, err := c.FileContent(ctx, b.OutputFileID)
+
+batches, err := c.ListBatches(ctx)
+b, err = c.CancelBatch(ctx, b.ID)
+```
+
+## Options and errors
+
+Shared options: `WithBaseURL`, `WithHTTPClient`, `WithTimeout`,
+`WithMaxRetries`, `WithHeader`. OpenAI-specific: `WithOrg`, `WithProject`.
+
+A non-success response becomes an `*ai.APIError` with `Status`, `Type`, `Code`,
+`Message` and the raw body:
+
+```go
+var apiErr *ai.APIError
+if errors.As(err, &apiErr) && apiErr.Status == http.StatusTooManyRequests {
+	// back off
+}
+```
+
+Requests missing a model or messages fail before the network with
+`ai.ErrNoModel` or `ai.ErrNoMessages`.
