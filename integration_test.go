@@ -7,6 +7,7 @@
 package openai_test
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"os"
@@ -15,6 +16,8 @@ import (
 	"github.com/goloop/ai"
 	"github.com/goloop/openai"
 )
+
+var integrationModel = cmp.Or(os.Getenv("OPENAI_MODEL"), openai.ModelGPT4oMini)
 
 func integrationClient(t *testing.T) *openai.Client {
 	t.Helper()
@@ -28,7 +31,7 @@ func integrationClient(t *testing.T) *openai.Client {
 func TestIntegrationGenerate(t *testing.T) {
 	c := integrationClient(t)
 	resp, err := c.Generate(context.Background(), &ai.Request{
-		Model:     openai.ModelGPT4oMini,
+		Model:     integrationModel,
 		MaxTokens: 16,
 		Messages:  []ai.Message{ai.UserText("Reply with exactly one word: pong")},
 	})
@@ -47,7 +50,7 @@ func TestIntegrationStream(t *testing.T) {
 	var done bool
 	var usage *ai.Usage
 	for chunk, err := range c.Stream(context.Background(), &ai.Request{
-		Model:     openai.ModelGPT4oMini,
+		Model:     integrationModel,
 		MaxTokens: 32,
 		Messages:  []ai.Message{ai.UserText("Count from 1 to 5.")},
 	}) {
@@ -68,7 +71,7 @@ func TestIntegrationStream(t *testing.T) {
 func TestIntegrationTools(t *testing.T) {
 	c := integrationClient(t)
 	resp, err := c.Generate(context.Background(), &ai.Request{
-		Model:     openai.ModelGPT4oMini,
+		Model:     integrationModel,
 		MaxTokens: 128,
 		Messages:  []ai.Message{ai.UserText("What is the weather in Kyiv? Use the tool.")},
 		Tools: []ai.Tool{{
@@ -93,7 +96,7 @@ func TestIntegrationResponsesStream(t *testing.T) {
 	var text string
 	var completed bool
 	for ev, err := range c.ResponsesStream(context.Background(), &openai.ResponsesRequest{
-		Model: openai.ModelGPT4oMini,
+		Model: integrationModel,
 		Input: "Say hello in one word.",
 	}) {
 		if err != nil {
