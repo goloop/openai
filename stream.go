@@ -33,11 +33,12 @@ type ChatStreamChunk struct {
 }
 
 func (c *Client) openStream(ctx context.Context, req *ChatRequest) (*http.Response, error) {
-	req.Stream = true
-	if req.StreamOptions == nil {
-		req.StreamOptions = &streamOptions{IncludeUsage: true}
+	r := *req // do not mutate the caller's request
+	r.Stream = true
+	if r.StreamOptions == nil {
+		r.StreamOptions = &streamOptions{IncludeUsage: true}
 	}
-	body, err := json.Marshal(req)
+	body, err := json.Marshal(&r)
 	if err != nil {
 		return nil, err
 	}
@@ -175,6 +176,12 @@ func (c *Client) Stream(ctx context.Context, req *ai.Request) iter.Seq2[ai.Chunk
 					}
 				}
 			}
+		}
+
+		// Flush any tool calls the stream did not close with a
+		// finish_reason (truncated streams, gateways that omit it).
+		if !flushTools() {
+			return
 		}
 
 		final := usage

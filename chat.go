@@ -112,8 +112,9 @@ func (c *Client) ChatCompletion(ctx context.Context, req *ChatRequest) (*ChatRes
 }
 
 func (c *Client) chatCompletion(ctx context.Context, req *ChatRequest) (*ChatResponse, []byte, error) {
-	req.Stream = false
-	body, err := json.Marshal(req)
+	r := *req // do not mutate the caller's request
+	r.Stream = false
+	body, err := json.Marshal(&r)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -273,6 +274,30 @@ func partsText(parts []ai.Part) string {
 	return b.String()
 }
 
+// contentText extracts text from a response message's Content, which the API
+// returns as a plain string, but OpenAI-compatible gateways may return as an
+// array of content parts ([]any of {"type":"text","text":"..."}).
+func contentText(content any) string {
+	switch v := content.(type) {
+	case string:
+		return v
+	case []any:
+		var b strings.Builder
+		for _, item := range v {
+			m, ok := item.(map[string]any)
+			if !ok {
+				continue
+			}
+			if t, ok := m["text"].(string); ok {
+				b.WriteString(t)
+			}
+		}
+		return b.String()
+	default:
+		return ""
+	}
+}
+
 func chatToolChoice(tc ai.ToolChoice) any {
 	switch tc {
 	case ai.ToolNone:
@@ -297,7 +322,7 @@ func chatToResponse(cr *ChatResponse) *ai.Response {
 	}
 	ch := cr.Choices[0]
 	resp.StopReason = ch.FinishReason
-	if s, ok := ch.Message.Content.(string); ok && s != "" {
+	if s := contentText(ch.Message.Content); s != "" {
 		resp.Parts = append(resp.Parts, ai.Text{Text: s})
 	}
 	for _, tc := range ch.Message.ToolCalls {
