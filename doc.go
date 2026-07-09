@@ -3,9 +3,9 @@
 //
 // The Client implements ai.Client, so Generate and Stream work the same as
 // with any other goloop AI provider. On top of that it exposes OpenAI's native
-// endpoints and their full options: chat completions, the responses API,
-// embeddings, images, audio (transcription, translation and speech),
-// moderations, models, files and batches.
+// endpoints and their full options: chat completions, the responses API
+// (synchronous and streaming), embeddings, images, audio (transcription,
+// translation and speech), moderations, models, files and batches.
 //
 //	c := openai.New(os.Getenv("OPENAI_API_KEY"))
 //	resp, err := c.Generate(ctx, &ai.Request{

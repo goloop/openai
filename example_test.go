@@ -39,6 +39,19 @@ func ExampleClient_ChatCompletion() {
 	// Output: gpt-4o-mini
 }
 
+// ExampleClient_ResponsesStream shows a streaming responses request. Ranging
+// over ResponsesStream yields raw events; text arrives on
+// "response.output_text.delta" and the final "response.completed" carries the
+// whole result and token usage.
+func ExampleClient_ResponsesStream() {
+	req := &openai.ResponsesRequest{
+		Model: openai.ModelGPT4oMini,
+		Input: "Tell me a joke.",
+	}
+	fmt.Println(req.Model)
+	// Output: gpt-4o-mini
+}
+
 // ExampleTool shows a tool definition passed with a request.
 func ExampleTool() {
 	tool := ai.Tool{
