@@ -5,7 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.1.1]
+## [0.1.1] - 2026-07-09
+
+### Changed
+- Require `goloop/ai` v0.1.1, so exhausted retries now surface the provider's
+  error body instead of a bare status.
 
 ### Added
 - Streaming responses API: `ResponsesStream` yields raw `ResponseStreamEvent`
