@@ -2,7 +2,13 @@ package openai
 
 import (
 	"context"
+	"encoding/json"
+	"io"
+	"iter"
+	"net/http"
 	"strings"
+
+	"github.com/goloop/ai"
 )
 
 // ResponsesRequest is a request to the responses API, OpenAI's newer stateful
@@ -14,6 +20,7 @@ type ResponsesRequest struct {
 	MaxOutputTokens int      `json:"max_output_tokens,omitempty"`
 	Temperature     *float64 `json:"temperature,omitempty"`
 	Store           *bool    `json:"store,omitempty"`
+	Stream          bool     `json:"stream,omitempty"`
 }
 
 // ResponsesResponse is a responses API result.
@@ -57,4 +64,71 @@ func (c *Client) CreateResponse(ctx context.Context, req *ResponsesRequest) (*Re
 		return nil, err
 	}
 	return &out, nil
+}
+
+// ResponseStreamEvent is one server-sent event of a streaming responses
+// request. Type names the event and selects which fields apply: text arrives on
+// "response.output_text.delta" (Delta), the finished result on
+// "response.completed"/"response.incomplete" (Response), and a failure on
+// "response.failed"/"error" (Message, Code).
+type ResponseStreamEvent struct {
+	Type     string             `json:"type"`
+	Delta    string             `json:"delta"`
+	Response *ResponsesResponse `json:"response"`
+	Message  string             `json:"message"`
+	Code     string             `json:"code"`
+}
+
+// openResponsesStream opens the streaming /responses connection for a request.
+// The caller owns the returned response body.
+func (c *Client) openResponsesStream(ctx context.Context, req *ResponsesRequest) (*http.Response, error) {
+	r := *req // do not mutate the caller's request
+	r.Stream = true
+	body, err := json.Marshal(&r)
+	if err != nil {
+		return nil, err
+	}
+	h := c.headers()
+	h.Set("accept", "text/event-stream")
+	resp, err := c.opts.Do(ctx, http.MethodPost, c.opts.BaseURL+"/responses", body, h)
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode != http.StatusOK {
+		data, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		return nil, parseError(resp.StatusCode, data)
+	}
+	return resp, nil
+}
+
+// ResponsesStream sends a streaming responses request and yields each raw event
+// as it arrives. Text deltas come as "response.output_text.delta" events; the
+// final "response.completed" event carries the full result and token usage.
+func (c *Client) ResponsesStream(ctx context.Context, req *ResponsesRequest) iter.Seq2[ResponseStreamEvent, error] {
+	return func(yield func(ResponseStreamEvent, error) bool) {
+		resp, err := c.openResponsesStream(ctx, req)
+		if err != nil {
+			yield(ResponseStreamEvent{}, err)
+			return
+		}
+		defer resp.Body.Close()
+
+		for data, err := range ai.SSEEvents(resp.Body) {
+			if err != nil {
+				yield(ResponseStreamEvent{}, err)
+				return
+			}
+			if data == "[DONE]" {
+				return
+			}
+			var ev ResponseStreamEvent
+			if json.Unmarshal([]byte(data), &ev) != nil {
+				continue
+			}
+			if !yield(ev, nil) {
+				return
+			}
+		}
+	}
 }

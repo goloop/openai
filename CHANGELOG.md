@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.1.1]
 
+### Added
+- Streaming responses API: `ResponsesStream` yields raw `ResponseStreamEvent`
+  values (`response.output_text.delta`, `response.completed`, ...) so the newer
+  responses endpoint can be consumed token by token, not only synchronously.
+
 ### Fixed
 - Streamed tool calls are no longer lost when the stream ends without a
   `finish_reason` of `tool_calls` (truncated streams or gateways that omit it).

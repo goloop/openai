@@ -97,6 +97,23 @@ c.CreateBatch(ctx, fileID, "/v1/chat/completions", "24h")
 c.CreateResponse(ctx, &openai.ResponsesRequest{Model: "gpt-4o-mini", Input: "hi"})
 ```
 
+The responses API also streams. Range over `ResponsesStream` and read text from
+`response.output_text.delta` events; the final `response.completed` event carries
+the whole result and token usage:
+
+```go
+for ev, err := range c.ResponsesStream(ctx, &openai.ResponsesRequest{
+	Model: "gpt-4o-mini", Input: "Tell me a joke.",
+}) {
+	if err != nil {
+		break
+	}
+	if ev.Type == "response.output_text.delta" {
+		fmt.Print(ev.Delta)
+	}
+}
+```
+
 ## Documentation
 
 Full reference: **[DOC.md](DOC.md)** (Ukrainian: **[DOC.UK.md](DOC.UK.md)**).
