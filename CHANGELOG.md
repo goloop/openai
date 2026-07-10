@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.2] - 2026-07-10
+
+### Added
+- `ResponsesStream` now surfaces function-call events: `ResponseStreamEvent`
+  gains `Item` (name/call_id), `ItemID`, `OutputIndex` and `Arguments`, so tool
+  calls can be read from the responses stream, not just text.
+
+### Changed
+- Require `goloop/ai` v0.2.0 (500 no longer retried; jittered backoff).
+- `Generate` godoc clarifies it returns the first choice; use `ChatCompletion`
+  for n > 1.
+
 ## [0.1.1] - 2026-07-09
 
 ### Changed

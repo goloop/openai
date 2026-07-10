@@ -96,3 +96,60 @@ func TestResponsesRequestNotMutated(t *testing.T) {
 		t.Error("caller request was mutated: Stream = true")
 	}
 }
+
+// TestResponsesStreamToolCall verifies the responses stream surfaces function
+// call events: the item announcement (name/call_id), the arguments deltas and
+// the final full arguments.
+func TestResponsesStreamToolCall(t *testing.T) {
+	events := []string{
+		`event: response.output_item.added`,
+		`data: {"type":"response.output_item.added","output_index":0,` +
+			`"item":{"type":"function_call","id":"fc_1","call_id":"call_1","name":"get_weather","arguments":""}}`,
+		``,
+		`event: response.function_call_arguments.delta`,
+		`data: {"type":"response.function_call_arguments.delta","item_id":"fc_1","delta":"{\"city\":"}`,
+		``,
+		`event: response.function_call_arguments.delta`,
+		`data: {"type":"response.function_call_arguments.delta","item_id":"fc_1","delta":"\"Kyiv\"}"}`,
+		``,
+		`event: response.function_call_arguments.done`,
+		`data: {"type":"response.function_call_arguments.done","item_id":"fc_1","arguments":"{\"city\":\"Kyiv\"}"}`,
+		``,
+		`event: response.completed`,
+		`data: {"type":"response.completed","response":{"id":"r1"}}`,
+		``,
+	}
+	c, done := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+		for _, line := range events {
+			io.WriteString(w, line+"\n")
+		}
+	})
+	defer done()
+
+	var name, args string
+	for ev, err := range c.ResponsesStream(context.Background(), &ResponsesRequest{
+		Model: "m", Input: "weather?",
+	}) {
+		if err != nil {
+			t.Fatal(err)
+		}
+		switch ev.Type {
+		case "response.output_item.added":
+			if ev.Item != nil {
+				name = ev.Item.Name
+			}
+		case "response.function_call_arguments.delta":
+			args += ev.Delta
+		case "response.function_call_arguments.done":
+			if ev.Arguments != args {
+				t.Errorf("done arguments %q != accumulated %q", ev.Arguments, args)
+			}
+		}
+	}
+	if name != "get_weather" {
+		t.Errorf("name = %q", name)
+	}
+	if args != `{"city":"Kyiv"}` {
+		t.Errorf("args = %q", args)
+	}
+}

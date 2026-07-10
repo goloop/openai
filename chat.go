@@ -132,7 +132,9 @@ func (c *Client) chatCompletion(ctx context.Context, req *ChatRequest) (*ChatRes
 	return &out, data, nil
 }
 
-// Generate implements [ai.Client] over chat completions.
+// Generate implements [ai.Client] over chat completions. It returns the first
+// choice; to request and read several choices (n > 1) use the native
+// [Client.ChatCompletion], which exposes every choice.
 func (c *Client) Generate(ctx context.Context, req *ai.Request) (*ai.Response, error) {
 	cr, err := c.chatRequest(req, false)
 	if err != nil {

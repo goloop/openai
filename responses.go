@@ -67,16 +67,36 @@ func (c *Client) CreateResponse(ctx context.Context, req *ResponsesRequest) (*Re
 }
 
 // ResponseStreamEvent is one server-sent event of a streaming responses
-// request. Type names the event and selects which fields apply: text arrives on
-// "response.output_text.delta" (Delta), the finished result on
-// "response.completed"/"response.incomplete" (Response), and a failure on
-// "response.failed"/"error" (Message, Code).
+// request. Type names the event and selects which fields apply:
+//
+//   - text: "response.output_text.delta" (Delta);
+//   - tool call: "response.output_item.added" announces the call (Item, with
+//     its name and call_id), "response.function_call_arguments.delta" streams
+//     the JSON arguments (Delta, keyed by ItemID), and
+//     "response.function_call_arguments.done" carries the full Arguments;
+//   - result: "response.completed"/"response.incomplete" (Response);
+//   - failure: "response.failed"/"error" (Message, Code).
 type ResponseStreamEvent struct {
-	Type     string             `json:"type"`
-	Delta    string             `json:"delta"`
-	Response *ResponsesResponse `json:"response"`
-	Message  string             `json:"message"`
-	Code     string             `json:"code"`
+	Type        string             `json:"type"`
+	Delta       string             `json:"delta"`
+	Arguments   string             `json:"arguments"`
+	ItemID      string             `json:"item_id"`
+	OutputIndex int                `json:"output_index"`
+	Item        *ResponseItem      `json:"item"`
+	Response    *ResponsesResponse `json:"response"`
+	Message     string             `json:"message"`
+	Code        string             `json:"code"`
+}
+
+// ResponseItem is an output item announced by a "response.output_item.added"
+// event. For a function call it carries the call's ID, name and the arguments
+// accumulated so far.
+type ResponseItem struct {
+	Type      string `json:"type"`
+	ID        string `json:"id"`
+	CallID    string `json:"call_id"`
+	Name      string `json:"name"`
+	Arguments string `json:"arguments"`
 }
 
 // openResponsesStream opens the streaming /responses connection for a request.
