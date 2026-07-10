@@ -115,6 +115,34 @@ resp, err := c.CreateResponse(ctx, &openai.ResponsesRequest{
 resp.Text()
 ```
 
+`ResponsesStream` streams the same request as raw `ResponseStreamEvent` values.
+The `Type` field names each event and selects which fields apply:
+
+```go
+for ev, err := range c.ResponsesStream(ctx, req) {
+	if err != nil {
+		break
+	}
+	switch ev.Type {
+	case "response.output_text.delta":
+		fmt.Print(ev.Delta) // incremental text
+	case "response.output_item.added":
+		// ev.Item announces a tool call (Name, CallID)
+	case "response.function_call_arguments.delta":
+		// ev.Delta streams the JSON arguments, keyed by ev.ItemID
+	case "response.function_call_arguments.done":
+		// ev.Arguments holds the full arguments object
+	case "response.completed":
+		// ev.Response carries the final result and usage
+	}
+}
+```
+
+Tool calls arrive as a sequence of `response.output_item.added` (the
+`ResponseItem` with its name and `call_id`), `...arguments.delta` (streamed JSON)
+and `...arguments.done` (the complete `Arguments`). A `response.failed` or
+`error` event carries `Message` and `Code`.
+
 ## Embeddings
 
 ```go

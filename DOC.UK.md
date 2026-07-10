@@ -111,6 +111,34 @@ resp, err := c.CreateResponse(ctx, &openai.ResponsesRequest{
 resp.Text()
 ```
 
+`ResponsesStream` стрімить той самий запит як сирі значення `ResponseStreamEvent`.
+Поле `Type` називає кожну подію й обирає, які поля застосовні:
+
+```go
+for ev, err := range c.ResponsesStream(ctx, req) {
+	if err != nil {
+		break
+	}
+	switch ev.Type {
+	case "response.output_text.delta":
+		fmt.Print(ev.Delta) // інкрементальний текст
+	case "response.output_item.added":
+		// ev.Item анонсує виклик інструмента (Name, CallID)
+	case "response.function_call_arguments.delta":
+		// ev.Delta стрімить JSON-аргументи, ключ - ev.ItemID
+	case "response.function_call_arguments.done":
+		// ev.Arguments містить повний об'єкт аргументів
+	case "response.completed":
+		// ev.Response несе фінальний результат і usage
+	}
+}
+```
+
+Виклики інструментів надходять послідовністю `response.output_item.added`
+(`ResponseItem` з іменем і `call_id`), `...arguments.delta` (стрімлений JSON) і
+`...arguments.done` (повні `Arguments`). Подія `response.failed` чи `error` несе
+`Message` і `Code`.
+
 ## Embeddings
 
 ```go
