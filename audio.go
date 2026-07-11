@@ -3,7 +3,10 @@ package openai
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
+
+	"github.com/goloop/ai"
 )
 
 // TranscriptionRequest transcribes or translates an audio file. File holds the
@@ -34,6 +37,9 @@ func (c *Client) audioText(
 	req *TranscriptionRequest,
 	withLanguage bool,
 ) (string, error) {
+	if req == nil {
+		return "", ai.ErrNoRequest
+	}
 	fields := map[string]string{"model": req.Model}
 	if withLanguage && req.Language != "" {
 		fields["language"] = req.Language
@@ -74,13 +80,32 @@ type SpeechRequest struct {
 	Speed  float64 `json:"speed,omitempty"`
 }
 
+// SpeechTo synthesizes audio for the given text and writes it to w, streaming
+// the body rather than buffering it in memory. Prefer it for long inputs.
+func (c *Client) SpeechTo(ctx context.Context, req *SpeechRequest, w io.Writer) error {
+	if req == nil {
+		return ai.ErrNoRequest
+	}
+	body, err := json.Marshal(req)
+	if err != nil {
+		return err
+	}
+	return c.sendTo(ctx, http.MethodPost, "/audio/speech", body, w)
+}
+
 // Speech synthesizes audio for the given text and returns the raw audio bytes.
+// It is the convenience form of SpeechTo and reads the body under a hard
+// ceiling; use SpeechTo for a long input whose audio may exceed it.
 func (c *Client) Speech(ctx context.Context, req *SpeechRequest) ([]byte, error) {
+	if req == nil {
+		return nil, ai.ErrNoRequest
+	}
 	body, err := json.Marshal(req)
 	if err != nil {
 		return nil, err
 	}
-	data, status, err := c.send(ctx, http.MethodPost, "/audio/speech", body)
+	data, status, err := c.sendLimited(ctx, http.MethodPost,
+		"/audio/speech", body, maxBinaryBytes)
 	if err != nil {
 		return nil, err
 	}

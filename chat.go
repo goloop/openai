@@ -112,6 +112,9 @@ func (c *Client) ChatCompletion(ctx context.Context, req *ChatRequest) (*ChatRes
 }
 
 func (c *Client) chatCompletion(ctx context.Context, req *ChatRequest) (*ChatResponse, []byte, error) {
+	if req == nil {
+		return nil, nil, ai.ErrNoRequest
+	}
 	r := *req // do not mutate the caller's request
 	r.Stream = false
 	body, err := json.Marshal(&r)

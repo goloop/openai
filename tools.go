@@ -4,10 +4,35 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"mime/multipart"
 	"net/http"
 )
+
+// maxJSONBytes caps how much of a JSON response body is read into memory, so a
+// malformed or hostile server cannot exhaust memory with an unbounded stream.
+const maxJSONBytes = 64 << 20 // 64 MiB
+
+// maxBinaryBytes is the in-memory ceiling for genuinely binary bodies (file
+// downloads, synthesized speech). These can be larger than a JSON reply, so
+// the ceiling is higher, but it stays bounded so a runaway body cannot exhaust
+// memory. Callers that need a bigger body stream it with FileContentTo or
+// SpeechTo instead of buffering it here.
+const maxBinaryBytes = 128 << 20 // 128 MiB
+
+// readLimited reads up to limit bytes from r, returning an error if the body
+// exceeds that ceiling rather than silently truncating it.
+func readLimited(r io.Reader, limit int64) ([]byte, error) {
+	data, err := io.ReadAll(io.LimitReader(r, limit+1))
+	if err != nil {
+		return nil, err
+	}
+	if int64(len(data)) > limit {
+		return nil, fmt.Errorf("openai: response body exceeds %d bytes", limit)
+	}
+	return data, nil
+}
 
 // headers returns the headers common to every OpenAI request.
 func (c *Client) headers() http.Header {
@@ -24,11 +49,22 @@ func (c *Client) headers() http.Header {
 }
 
 // send performs a request against a path under the base URL and returns the
-// response body and status code.
+// response body (read under the JSON ceiling) and status code.
 func (c *Client) send(
 	ctx context.Context,
 	method, path string,
 	body []byte,
+) ([]byte, int, error) {
+	return c.sendLimited(ctx, method, path, body, maxJSONBytes)
+}
+
+// sendLimited is send with an explicit read ceiling, for endpoints whose
+// bodies are binary and can be larger than a JSON reply.
+func (c *Client) sendLimited(
+	ctx context.Context,
+	method, path string,
+	body []byte,
+	limit int64,
 ) ([]byte, int, error) {
 	resp, err := c.opts.Do(ctx, method, c.opts.BaseURL+path, body, c.headers())
 	if err != nil {
@@ -36,11 +72,34 @@ func (c *Client) send(
 	}
 	defer resp.Body.Close()
 
-	data, err := io.ReadAll(resp.Body)
+	data, err := readLimited(resp.Body, limit)
 	if err != nil {
 		return nil, resp.StatusCode, err
 	}
 	return data, resp.StatusCode, nil
+}
+
+// sendTo performs a request and streams a successful response body to w,
+// copying it without buffering the whole body in memory. On a non-success
+// status it reads the bounded error body and returns an *ai.APIError.
+func (c *Client) sendTo(
+	ctx context.Context,
+	method, path string,
+	body []byte,
+	w io.Writer,
+) error {
+	resp, err := c.opts.Do(ctx, method, c.opts.BaseURL+path, body, c.headers())
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		data, _ := readLimited(resp.Body, maxJSONBytes)
+		return parseError(resp.StatusCode, data)
+	}
+	_, err = io.Copy(w, resp.Body)
+	return err
 }
 
 // postJSON marshals in, POSTs it to path and unmarshals the response into out.
@@ -117,7 +176,7 @@ func (c *Client) postMultipart(
 	}
 	defer resp.Body.Close()
 
-	data, err := io.ReadAll(resp.Body)
+	data, err := readLimited(resp.Body, maxJSONBytes)
 	if err != nil {
 		return nil, err
 	}

@@ -59,6 +59,9 @@ func (r *ResponsesResponse) Text() string {
 
 // CreateResponse sends a request to the responses API.
 func (c *Client) CreateResponse(ctx context.Context, req *ResponsesRequest) (*ResponsesResponse, error) {
+	if req == nil {
+		return nil, ai.ErrNoRequest
+	}
 	var out ResponsesResponse
 	if err := c.postJSON(ctx, "/responses", req, &out); err != nil {
 		return nil, err
@@ -102,6 +105,9 @@ type ResponseItem struct {
 // openResponsesStream opens the streaming /responses connection for a request.
 // The caller owns the returned response body.
 func (c *Client) openResponsesStream(ctx context.Context, req *ResponsesRequest) (*http.Response, error) {
+	if req == nil {
+		return nil, ai.ErrNoRequest
+	}
 	r := *req // do not mutate the caller's request
 	r.Stream = true
 	body, err := json.Marshal(&r)
@@ -115,7 +121,7 @@ func (c *Client) openResponsesStream(ctx context.Context, req *ResponsesRequest)
 		return nil, err
 	}
 	if resp.StatusCode != http.StatusOK {
-		data, _ := io.ReadAll(resp.Body)
+		data, _ := readLimited(resp.Body, maxJSONBytes)
 		resp.Body.Close()
 		return nil, parseError(resp.StatusCode, data)
 	}
@@ -134,21 +140,47 @@ func (c *Client) ResponsesStream(ctx context.Context, req *ResponsesRequest) ite
 		}
 		defer resp.Body.Close()
 
+		sawTerminal := false
 		for data, err := range ai.SSEEvents(resp.Body) {
 			if err != nil {
 				yield(ResponseStreamEvent{}, err)
 				return
 			}
+			// The responses API has no [DONE] sentinel; some gateways still
+			// emit one, so tolerate it.
 			if data == "[DONE]" {
+				sawTerminal = true
 				return
 			}
 			var ev ResponseStreamEvent
-			if json.Unmarshal([]byte(data), &ev) != nil {
-				continue
+			if e := json.Unmarshal([]byte(data), &ev); e != nil {
+				yield(ResponseStreamEvent{}, e)
+				return
+			}
+			if isTerminalResponseEvent(ev.Type) {
+				sawTerminal = true
 			}
 			if !yield(ev, nil) {
 				return
 			}
 		}
+
+		// A stream that ended without a terminal event (response.completed,
+		// response.incomplete, response.failed or error) was truncated.
+		if !sawTerminal {
+			yield(ResponseStreamEvent{}, io.ErrUnexpectedEOF)
+		}
+	}
+}
+
+// isTerminalResponseEvent reports whether a responses stream event type ends
+// the stream, so a stream that stops without one can be flagged as truncated.
+func isTerminalResponseEvent(typ string) bool {
+	switch typ {
+	case "response.completed", "response.incomplete",
+		"response.failed", "error":
+		return true
+	default:
+		return false
 	}
 }

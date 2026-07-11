@@ -1,14 +1,223 @@
 package openai
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"io"
 	"net/http"
+	"strings"
 	"testing"
 
 	"github.com/goloop/ai"
 )
+
+// A chat stream that ends without a [DONE] sentinel was truncated and must
+// surface an error, not report Done with a cut-off result.
+func TestStreamTruncatedNoDone(t *testing.T) {
+	events := []string{
+		`data: {"choices":[{"index":0,"delta":{"content":"Hel"}}]}`, ``,
+		// connection ends here - no [DONE]
+	}
+	c, done := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+		for _, line := range events {
+			io.WriteString(w, line+"\n")
+		}
+	})
+	defer done()
+
+	var gotErr error
+	var doneSeen bool
+	for chunk, err := range c.Stream(context.Background(), &ai.Request{
+		Model: "m", Messages: []ai.Message{ai.UserText("hi")},
+	}) {
+		if err != nil {
+			gotErr = err
+			break
+		}
+		if chunk.Done {
+			doneSeen = true
+		}
+	}
+	if doneSeen {
+		t.Error("truncated stream should not report Done")
+	}
+	if !errors.Is(gotErr, io.ErrUnexpectedEOF) {
+		t.Errorf("err = %v, want ErrUnexpectedEOF", gotErr)
+	}
+}
+
+// A streamed tool call whose accumulated arguments are not valid JSON must be
+// reported as an error, not yielded as an unparseable Input.
+func TestStreamInvalidToolArgs(t *testing.T) {
+	events := []string{
+		`data: {"choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"id":"call_1",` +
+			`"function":{"name":"lookup","arguments":"{not json"}}]},"finish_reason":"tool_calls"}]}`, ``,
+		`data: [DONE]`, ``,
+	}
+	c, done := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+		for _, line := range events {
+			io.WriteString(w, line+"\n")
+		}
+	})
+	defer done()
+
+	var gotErr error
+	for chunk, err := range c.Stream(context.Background(), &ai.Request{
+		Model: "m", Messages: []ai.Message{ai.UserText("hi")},
+	}) {
+		if err != nil {
+			gotErr = err
+			break
+		}
+		if chunk.ToolCall != nil {
+			t.Error("invalid tool args must not yield a tool call")
+		}
+	}
+	if gotErr == nil {
+		t.Fatal("want error for invalid tool-call JSON, got nil")
+	}
+}
+
+// The native ResponsesStream must surface a malformed SSE JSON payload as an
+// error rather than silently skipping it.
+func TestResponsesStreamMalformedJSON(t *testing.T) {
+	events := []string{
+		`event: x`, `data: {not valid json`, ``,
+	}
+	c, done := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+		for _, line := range events {
+			io.WriteString(w, line+"\n")
+		}
+	})
+	defer done()
+
+	var gotErr error
+	for _, err := range c.ResponsesStream(context.Background(), &ResponsesRequest{
+		Model: "m", Input: "hi",
+	}) {
+		if err != nil {
+			gotErr = err
+			break
+		}
+	}
+	if gotErr == nil {
+		t.Fatal("want error for malformed SSE JSON, got nil")
+	}
+}
+
+// A responses stream that ends without a terminal event was truncated.
+func TestResponsesStreamTruncated(t *testing.T) {
+	events := []string{
+		`event: response.output_text.delta`,
+		`data: {"type":"response.output_text.delta","delta":"Hel"}`, ``,
+		// no response.completed
+	}
+	c, done := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+		for _, line := range events {
+			io.WriteString(w, line+"\n")
+		}
+	})
+	defer done()
+
+	var gotErr error
+	for _, err := range c.ResponsesStream(context.Background(), &ResponsesRequest{
+		Model: "m", Input: "hi",
+	}) {
+		if err != nil {
+			gotErr = err
+			break
+		}
+	}
+	if !errors.Is(gotErr, io.ErrUnexpectedEOF) {
+		t.Errorf("err = %v, want ErrUnexpectedEOF", gotErr)
+	}
+}
+
+// Public methods that take a request pointer must return an error, not panic,
+// on a nil argument.
+func TestNilRequestGuards(t *testing.T) {
+	c, done := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+		t.Error("server must not be reached for a nil request")
+	})
+	defer done()
+
+	if _, err := c.ChatCompletion(context.Background(), nil); !errors.Is(err, ai.ErrNoRequest) {
+		t.Errorf("ChatCompletion(nil) = %v", err)
+	}
+	if _, err := c.CreateResponse(context.Background(), nil); !errors.Is(err, ai.ErrNoRequest) {
+		t.Errorf("CreateResponse(nil) = %v", err)
+	}
+	if _, err := c.Transcribe(context.Background(), nil); !errors.Is(err, ai.ErrNoRequest) {
+		t.Errorf("Transcribe(nil) = %v", err)
+	}
+	if _, err := c.Translate(context.Background(), nil); !errors.Is(err, ai.ErrNoRequest) {
+		t.Errorf("Translate(nil) = %v", err)
+	}
+	if _, err := c.Speech(context.Background(), nil); !errors.Is(err, ai.ErrNoRequest) {
+		t.Errorf("Speech(nil) = %v", err)
+	}
+	if err := c.SpeechTo(context.Background(), nil, io.Discard); !errors.Is(err, ai.ErrNoRequest) {
+		t.Errorf("SpeechTo(nil) = %v", err)
+	}
+	for _, err := range c.ChatCompletionStream(context.Background(), nil) {
+		if !errors.Is(err, ai.ErrNoRequest) {
+			t.Errorf("ChatCompletionStream(nil) = %v", err)
+		}
+		break
+	}
+	for _, err := range c.ResponsesStream(context.Background(), nil) {
+		if !errors.Is(err, ai.ErrNoRequest) {
+			t.Errorf("ResponsesStream(nil) = %v", err)
+		}
+		break
+	}
+}
+
+// FileContentTo and SpeechTo stream a successful body straight to the writer.
+func TestStreamToWriter(t *testing.T) {
+	c, done := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/content") {
+			io.WriteString(w, "file-bytes")
+			return
+		}
+		io.WriteString(w, "audio-bytes")
+	})
+	defer done()
+
+	var fb bytes.Buffer
+	if err := c.FileContentTo(context.Background(), "file_1", &fb); err != nil {
+		t.Fatal(err)
+	}
+	if fb.String() != "file-bytes" {
+		t.Errorf("file = %q", fb.String())
+	}
+	var sb bytes.Buffer
+	if err := c.SpeechTo(context.Background(),
+		&SpeechRequest{Model: "tts", Input: "hi", Voice: "alloy"}, &sb); err != nil {
+		t.Fatal(err)
+	}
+	if sb.String() != "audio-bytes" {
+		t.Errorf("speech = %q", sb.String())
+	}
+}
+
+// A JSON response body larger than the ceiling must error, not be truncated.
+func TestResponseBodyCapped(t *testing.T) {
+	c, done := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+		buf := make([]byte, 1<<20)
+		for i := 0; i <= maxJSONBytes/len(buf)+1; i++ {
+			if _, err := w.Write(buf); err != nil {
+				return
+			}
+		}
+	})
+	defer done()
+
+	if _, err := c.Models(context.Background()); err == nil {
+		t.Fatal("want error for oversized response body, got nil")
+	}
+}
 
 // BUG-01: tool calls must be flushed even when the stream ends without a
 // finish_reason of "tool_calls".

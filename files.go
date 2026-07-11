@@ -3,7 +3,9 @@ package openai
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
+	"net/url"
 )
 
 // File describes an uploaded file.
@@ -51,15 +53,25 @@ func (c *Client) Files(ctx context.Context) ([]File, error) {
 // GetFile returns a single file's metadata.
 func (c *Client) GetFile(ctx context.Context, id string) (*File, error) {
 	var f File
-	if err := c.getJSON(ctx, "/files/"+id, &f); err != nil {
+	if err := c.getJSON(ctx, "/files/"+url.PathEscape(id), &f); err != nil {
 		return nil, err
 	}
 	return &f, nil
 }
 
-// FileContent downloads a file's contents.
+// FileContentTo downloads a file's contents and writes them to w, streaming
+// the body rather than buffering it in memory. Prefer it for large files.
+func (c *Client) FileContentTo(ctx context.Context, id string, w io.Writer) error {
+	return c.sendTo(ctx, http.MethodGet,
+		"/files/"+url.PathEscape(id)+"/content", nil, w)
+}
+
+// FileContent downloads a file's contents into memory. It is the convenience
+// form of FileContentTo and reads the body under a hard ceiling; use
+// FileContentTo for a file that may exceed it.
 func (c *Client) FileContent(ctx context.Context, id string) ([]byte, error) {
-	data, status, err := c.send(ctx, http.MethodGet, "/files/"+id+"/content", nil)
+	data, status, err := c.sendLimited(ctx, http.MethodGet,
+		"/files/"+url.PathEscape(id)+"/content", nil, maxBinaryBytes)
 	if err != nil {
 		return nil, err
 	}
@@ -71,7 +83,8 @@ func (c *Client) FileContent(ctx context.Context, id string) ([]byte, error) {
 
 // DeleteFile deletes an uploaded file.
 func (c *Client) DeleteFile(ctx context.Context, id string) error {
-	data, status, err := c.send(ctx, http.MethodDelete, "/files/"+id, nil)
+	data, status, err := c.send(ctx, http.MethodDelete,
+		"/files/"+url.PathEscape(id), nil)
 	if err != nil {
 		return err
 	}

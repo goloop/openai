@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"net/url"
 )
 
 // Batch is the state of a batch job.
@@ -51,7 +52,7 @@ func (c *Client) CreateBatch(
 // GetBatch returns the current state of a batch.
 func (c *Client) GetBatch(ctx context.Context, id string) (*Batch, error) {
 	var b Batch
-	if err := c.getJSON(ctx, "/batches/"+id, &b); err != nil {
+	if err := c.getJSON(ctx, "/batches/"+url.PathEscape(id), &b); err != nil {
 		return nil, err
 	}
 	return &b, nil
@@ -70,7 +71,8 @@ func (c *Client) ListBatches(ctx context.Context) ([]Batch, error) {
 
 // CancelBatch requests cancellation of a batch in progress.
 func (c *Client) CancelBatch(ctx context.Context, id string) (*Batch, error) {
-	data, status, err := c.send(ctx, http.MethodPost, "/batches/"+id+"/cancel", nil)
+	data, status, err := c.send(ctx, http.MethodPost,
+		"/batches/"+url.PathEscape(id)+"/cancel", nil)
 	if err != nil {
 		return nil, err
 	}

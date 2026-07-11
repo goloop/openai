@@ -5,6 +5,36 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] - 2026-07-12
+
+### Added
+- `FileContentTo` and `SpeechTo` stream a binary body straight to an
+  `io.Writer` instead of buffering it in memory, so a large download or long
+  synthesized audio no longer has to fit in a `[]byte`. The existing
+  `FileContent` and `Speech` stay as convenience wrappers that read the body
+  under a hard ceiling.
+
+### Fixed
+- Response bodies are now read under a ceiling (64 MiB for JSON, 128 MiB for
+  the in-memory binary wrappers), so a malformed or hostile server cannot
+  exhaust memory with an unbounded body.
+- A chat stream that ends without a `[DONE]` sentinel, and a responses stream
+  that ends without a terminal event, now surface `io.ErrUnexpectedEOF` rather
+  than presenting a truncated result as complete.
+- The native `ResponsesStream` now surfaces a malformed SSE JSON payload as an
+  error instead of silently skipping the event, matching the chat stream.
+- A streamed tool call whose accumulated arguments are not valid JSON is now
+  reported as an error rather than yielded as an unparseable `Input`.
+- `GetModel`, `GetFile`, `FileContent`, `DeleteFile`, `GetBatch` and
+  `CancelBatch` now escape the path segment, so an ID with reserved characters
+  cannot alter the request URL.
+- `ChatCompletion`, `ChatCompletionStream`, `CreateResponse`,
+  `ResponsesStream`, `Transcribe`, `Translate` and `Speech` return an error
+  instead of panicking when passed a nil request.
+
+### Changed
+- Requires `github.com/goloop/ai` v0.3.0.
+
 ## [0.1.3] - 2026-07-10
 
 ### Documentation

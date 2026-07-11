@@ -3,6 +3,7 @@ package openai
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"iter"
 	"net/http"
@@ -33,6 +34,9 @@ type ChatStreamChunk struct {
 }
 
 func (c *Client) openStream(ctx context.Context, req *ChatRequest) (*http.Response, error) {
+	if req == nil {
+		return nil, ai.ErrNoRequest
+	}
 	r := *req // do not mutate the caller's request
 	r.Stream = true
 	if r.StreamOptions == nil {
@@ -49,7 +53,7 @@ func (c *Client) openStream(ctx context.Context, req *ChatRequest) (*http.Respon
 		return nil, err
 	}
 	if resp.StatusCode != http.StatusOK {
-		data, _ := io.ReadAll(resp.Body)
+		data, _ := readLimited(resp.Body, maxJSONBytes)
 		resp.Body.Close()
 		return nil, parseError(resp.StatusCode, data)
 	}
@@ -84,6 +88,9 @@ func (c *Client) ChatCompletionStream(ctx context.Context, req *ChatRequest) ite
 				return
 			}
 		}
+
+		// The stream ended without a [DONE] sentinel: it was truncated.
+		yield(ChatStreamChunk{}, io.ErrUnexpectedEOF)
 	}
 }
 
@@ -118,6 +125,12 @@ func (c *Client) Stream(ctx context.Context, req *ai.Request) iter.Seq2[ai.Chunk
 				if len(input) == 0 {
 					input = []byte("{}")
 				}
+				if !json.Valid(input) {
+					yield(ai.Chunk{}, fmt.Errorf(
+						"openai: tool call %q has invalid JSON arguments",
+						t.name))
+					return false
+				}
 				call := ai.ToolUse{ID: t.id, Name: t.name, Input: json.RawMessage(input)}
 				if !yield(ai.Chunk{ToolCall: &call}, nil) {
 					return false
@@ -128,12 +141,14 @@ func (c *Client) Stream(ctx context.Context, req *ai.Request) iter.Seq2[ai.Chunk
 			return true
 		}
 
+		sawDone := false
 		for data, err := range ai.SSEEvents(resp.Body) {
 			if err != nil {
 				yield(ai.Chunk{}, err)
 				return
 			}
 			if data == "[DONE]" {
+				sawDone = true
 				break
 			}
 
@@ -179,8 +194,18 @@ func (c *Client) Stream(ctx context.Context, req *ai.Request) iter.Seq2[ai.Chunk
 		}
 
 		// Flush any tool calls the stream did not close with a
-		// finish_reason (truncated streams, gateways that omit it).
+		// finish_reason (truncated streams, gateways that omit it). A false
+		// return means the consumer stopped or a tool call had invalid JSON
+		// arguments; either way the stream is done.
 		if !flushTools() {
+			return
+		}
+
+		// A stream that ended without a [DONE] sentinel was truncated: the
+		// text or tool arguments may be incomplete and the usage partial, so
+		// report it rather than presenting a cut-off result as complete.
+		if !sawDone {
+			yield(ai.Chunk{}, io.ErrUnexpectedEOF)
 			return
 		}
 

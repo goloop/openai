@@ -176,7 +176,10 @@ audio, err := c.Speech(ctx, &openai.SpeechRequest{
 })
 ```
 
-`Speech` returns the raw audio bytes.
+`Speech` returns the raw audio bytes, read under a hard ceiling; for a long
+input use `SpeechTo(ctx, req, w)` to stream the audio to an `io.Writer` without
+buffering it in memory. Likewise `FileContentTo(ctx, id, w)` streams a file
+download, while `FileContent` returns it as a capped `[]byte`.
 
 ## Moderations
 
