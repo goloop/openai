@@ -11,6 +11,7 @@ Ukrainian version: **[DOC.UK.md](DOC.UK.md)**.
 - [Mental model](#mental-model)
 - [Creating a client](#creating-a-client)
 - [Generate and Stream](#generate-and-stream)
+- [Structured output](#structured-output)
 - [Native chat completions](#native-chat-completions)
 - [Responses API](#responses-api)
 - [Embeddings](#embeddings)
@@ -86,6 +87,46 @@ Tool use, images and system prompts use the shared `ai` types: `ai.Tool`,
 Tool results are sent back as `RoleTool` messages whose `ai.ToolResult.ID`
 matches the `ai.ToolUse.ID`.
 
+## Structured output
+
+`ai.Request.Format` maps onto the provider's own `response_format`, so a
+request for JSON is enforced by the provider rather than merely asked for:
+
+```go
+resp, err := c.Generate(ctx, &ai.Request{
+	Model:    openai.ModelGPT4oMini,
+	Messages: []ai.Message{ai.UserText("Draft SEO fields for this article.")},
+	Format: &ai.Format{
+		Type:   ai.FormatJSONSchema,
+		Name:   "seo",
+		Schema: schema,
+		Strict: true,
+	},
+})
+
+var seo SEO
+err = resp.JSON(&seo)
+```
+
+| `ai.Format.Type` | sent as |
+|---|---|
+| `ai.FormatJSON` | `{"type":"json_object"}` |
+| `ai.FormatJSONSchema` | `{"type":"json_schema","json_schema":{name, schema, strict}}` |
+
+`Response.Format` is `ai.FormatNative` for both: this provider enforces every
+shape it accepts.
+
+Two things worth knowing:
+
+- **Plain JSON mode needs the word in the prompt.** The endpoint rejects
+  `json_object` with a 400 unless "json" appears somewhere in the messages, so
+  for `ai.FormatJSON` the driver appends `ai.Format.Instruction()` to the system
+  prompt. Your own system prompt is kept, and the instruction follows it. Schema
+  mode carries no such rule and the prompt is left untouched.
+- **Schema mode needs a recent model.** There is no model capability table here
+  on purpose - one would be wrong the week a model ships - so an unsupported
+  pairing is reported by the provider, which says so plainly.
+
 ## Native chat completions
 
 For OpenAI-only options build a `ChatRequest` and call `ChatCompletion` or
@@ -157,10 +198,29 @@ resp, err := c.Embeddings(ctx, &openai.EmbeddingRequest{
 
 ```go
 resp, err := c.GenerateImage(ctx, &openai.ImageRequest{
-	Model: "gpt-image-1", Prompt: "a watercolor cat", Size: "1024x1024",
+	Model: openai.ModelGPTImage1, Prompt: "a watercolor cat", Size: "1024x1024",
 })
-resp.Data[0].URL // or B64JSON
+png, err := resp.Data[0].Bytes() // the raw image; URL and B64JSON stay available
 ```
+
+`Bytes` decodes what the provider sent inline. It does no I/O: an image that
+came back as a URL returns `ErrNoImageBytes` naming the URL, because fetching
+it is a network call with your timeouts and proxy rules, not a decision for a
+field accessor.
+
+**The request is fitted to the model.** The `gpt-image` family always answers
+with base64 and rejects `response_format` outright, while `dall-e-2`/`dall-e-3`
+accept it and default to a URL:
+
+| Model | `ResponseFormat` | Result |
+|---|---|---|
+| `gpt-image-*` | unset or `ImageFormatB64JSON` | field dropped; base64 comes back |
+| `gpt-image-*` | `ImageFormatURL` | `ErrImageFormat`, before anything is sent |
+| `dall-e-*` | anything | passed through unchanged |
+
+Asking a `gpt-image` model for a URL fails here rather than succeeding with an
+empty `URL` field, so the incompatibility is not something to rediscover by
+trial and error. Your own `ImageRequest` value is never modified.
 
 ## Audio
 

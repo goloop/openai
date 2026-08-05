@@ -11,6 +11,7 @@ completions (інтерфейс і нативний), стрімінг, response
 - [Ментальна модель](#ментальна-модель)
 - [Створення клієнта](#створення-клієнта)
 - [Generate і Stream](#generate-і-stream)
+- [Структурований вивід](#структурований-вивід)
 - [Нативні chat completions](#нативні-chat-completions)
 - [Responses API](#responses-api)
 - [Embeddings](#embeddings)
@@ -86,6 +87,46 @@ for chunk, err := range c.Stream(ctx, req) {
 `System`. Результати інструментів надсилаються назад повідомленнями `RoleTool`,
 де `ai.ToolResult.ID` збігається з `ai.ToolUse.ID`.
 
+## Структурований вивід
+
+`ai.Request.Format` лягає на власний `response_format` провайдера, тож запит на
+JSON провайдер **дотримує**, а не просто «чує»:
+
+```go
+resp, err := c.Generate(ctx, &ai.Request{
+	Model:    openai.ModelGPT4oMini,
+	Messages: []ai.Message{ai.UserText("Склади SEO-поля для цієї статті.")},
+	Format: &ai.Format{
+		Type:   ai.FormatJSONSchema,
+		Name:   "seo",
+		Schema: schema,
+		Strict: true,
+	},
+})
+
+var seo SEO
+err = resp.JSON(&seo)
+```
+
+| `ai.Format.Type` | відправляється як |
+|---|---|
+| `ai.FormatJSON` | `{"type":"json_object"}` |
+| `ai.FormatJSONSchema` | `{"type":"json_schema","json_schema":{name, schema, strict}}` |
+
+`Response.Format` для обох - `ai.FormatNative`: цей провайдер дотримує кожну
+форму, яку приймає.
+
+Дві речі, які варто знати:
+
+- **Простому JSON-режиму потрібне слово в промпті.** Ендпоінт відбиває
+  `json_object` помилкою 400, якщо в повідомленнях ніде немає слова «json», тож
+  для `ai.FormatJSON` драйвер додає `ai.Format.Instruction()` до system-промпта.
+  Ваш власний system-промпт лишається, інструкція йде після нього. У схемному
+  режимі такого правила немає - промпт не чіпаємо.
+- **Схемному режиму потрібна свіжа модель.** Таблиці можливостей моделей тут
+  свідомо немає - вона була б хибною того ж тижня, коли виходить нова модель, -
+  тож про непідтримувану пару скаже сам провайдер, і скаже прямо.
+
 ## Нативні chat completions
 
 Для опцій, специфічних для OpenAI, будуйте `ChatRequest` і викликайте
@@ -152,10 +193,29 @@ resp, err := c.Embeddings(ctx, &openai.EmbeddingRequest{
 
 ```go
 resp, err := c.GenerateImage(ctx, &openai.ImageRequest{
-	Model: "gpt-image-1", Prompt: "a watercolor cat", Size: "1024x1024",
+	Model: openai.ModelGPTImage1, Prompt: "a watercolor cat", Size: "1024x1024",
 })
-resp.Data[0].URL // або B64JSON
+png, err := resp.Data[0].Bytes() // саме зображення; URL і B64JSON лишаються поруч
 ```
+
+`Bytes` декодує те, що провайдер поклав у відповідь. Він не робить I/O:
+зображення, що прийшло як URL, дає `ErrNoImageBytes` із самим URL у тексті -
+бо завантажити його це мережевий виклик із вашими таймаутами й проксі, а не
+рішення для аксесора поля.
+
+**Запит підганяється під модель.** Сімейство `gpt-image` завжди відповідає
+base64 і відхиляє `response_format` як такий, а `dall-e-2`/`dall-e-3` його
+приймають і за замовчуванням віддають URL:
+
+| Модель | `ResponseFormat` | Результат |
+|---|---|---|
+| `gpt-image-*` | не задано або `ImageFormatB64JSON` | поле прибирається; повертається base64 |
+| `gpt-image-*` | `ImageFormatURL` | `ErrImageFormat`, ще до відправки |
+| `dall-e-*` | будь-що | передається без змін |
+
+Прохання до `gpt-image` віддати URL падає тут, а не «успішно» з порожнім полем
+`URL`, тож несумісність не доводиться відкривати методом спроб. Ваше власне
+значення `ImageRequest` ніколи не змінюється.
 
 ## Аудіо
 

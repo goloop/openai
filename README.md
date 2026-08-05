@@ -13,8 +13,11 @@ top.
 - Chat completions: `Generate` for a single response, `Stream` for
   token-by-token output through `iter.Seq2`.
 - Tool use (function calling), multimodal image input and system prompts.
+- Structured output: `ai.Format` maps onto the provider's own `response_format`
+  (JSON mode or a JSON Schema); read it back with `resp.JSON(&v)`.
 - Native `ChatCompletion` and `ChatCompletionStream` with the full option set
   (response_format, seed, n, ...), plus the responses API.
+- Image generation fitted to the model, with `ImageData.Bytes()` for the image.
 - Embeddings, image generation, audio (transcription, translation, speech),
   moderations, models, files and batches.
 - Retries on 429 and 5xx with backoff; normalized, typed API errors.

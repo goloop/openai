@@ -149,6 +149,7 @@ func (c *Client) Generate(ctx context.Context, req *ai.Request) (*ai.Response, e
 	}
 	resp := chatToResponse(out)
 	resp.Raw = raw
+	resp.Format = formatMode(req.Format)
 	return resp, nil
 }
 
@@ -160,7 +161,7 @@ func (c *Client) chatRequest(req *ai.Request, stream bool) (*ChatRequest, error)
 
 	cr := &ChatRequest{
 		Model:               req.Model,
-		Messages:            chatMessages(req),
+		Messages:            chatMessages(req, systemPrompt(req)),
 		Temperature:         req.Temperature,
 		TopP:                req.TopP,
 		MaxCompletionTokens: req.MaxTokens,
@@ -184,16 +185,78 @@ func (c *Client) chatRequest(req *ai.Request, stream bool) (*ChatRequest, error)
 	if len(cr.Tools) > 0 {
 		cr.ToolChoice = chatToolChoice(req.ToolChoice)
 	}
+	format, err := responseFormat(req.Format)
+	if err != nil {
+		return nil, err
+	}
+	cr.ResponseFormat = format
 	if stream {
 		cr.StreamOptions = &streamOptions{IncludeUsage: true}
 	}
 	return cr, nil
 }
 
-func chatMessages(req *ai.Request) []ChatMessage {
+// systemPrompt returns the system prompt to send, which for plain JSON mode is
+// the caller's with the shared format instruction appended.
+//
+// The provider rejects {"type":"json_object"} outright unless the word "json"
+// appears somewhere in the messages. Adding the instruction satisfies that and
+// says the same thing to the model; it is a precondition of the endpoint, not
+// a stand-in for it, so the format is still enforced natively. Schema mode
+// carries no such rule and is left alone.
+func systemPrompt(req *ai.Request) string {
+	if req.Format != nil && req.Format.Type == ai.FormatJSON {
+		return req.Format.AppendInstruction(req.System)
+	}
+	return req.System
+}
+
+// responseFormat renders an [ai.Format] as the provider's response_format
+// value. It returns nil when nothing was asked for.
+//
+// Schema mode is only available on newer models. There is no capability table
+// here on purpose: one would be wrong the week a model ships, so an unsupported
+// pairing is left to the provider, which says so plainly in its error.
+func responseFormat(f *ai.Format) (json.RawMessage, error) {
+	if f == nil || f.Type == ai.FormatText {
+		return nil, nil
+	}
+
+	switch f.Type {
+	case ai.FormatJSON:
+		return json.RawMessage(`{"type":"json_object"}`), nil
+	case ai.FormatJSONSchema:
+		var body struct {
+			Type   string `json:"type"`
+			Schema struct {
+				Name   string          `json:"name"`
+				Schema json.RawMessage `json:"schema"`
+				Strict bool            `json:"strict,omitempty"`
+			} `json:"json_schema"`
+		}
+		body.Type = "json_schema"
+		body.Schema.Name = f.SchemaName()
+		body.Schema.Schema = f.Schema
+		body.Schema.Strict = f.Strict
+		return json.Marshal(body)
+	default:
+		return nil, ai.ErrBadFormat
+	}
+}
+
+// formatMode reports how the request's format was satisfied. Every shape this
+// driver accepts is enforced by the provider itself.
+func formatMode(f *ai.Format) ai.FormatMode {
+	if f == nil || f.Type == ai.FormatText {
+		return ai.FormatNone
+	}
+	return ai.FormatNative
+}
+
+func chatMessages(req *ai.Request, system string) []ChatMessage {
 	var out []ChatMessage
-	if req.System != "" {
-		out = append(out, ChatMessage{Role: "system", Content: req.System})
+	if system != "" {
+		out = append(out, ChatMessage{Role: "system", Content: system})
 	}
 	for _, m := range req.Messages {
 		switch m.Role {

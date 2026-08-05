@@ -184,7 +184,7 @@ func TestChatMessagesMapping(t *testing.T) {
 			}},
 		},
 	}
-	msgs := chatMessages(req)
+	msgs := chatMessages(req, systemPrompt(req))
 	if msgs[0].Role != "system" || msgs[0].Content != "sys" {
 		t.Errorf("system = %+v", msgs[0])
 	}

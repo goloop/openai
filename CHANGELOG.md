@@ -5,6 +5,35 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2026-08-05
+
+### Added
+- `ai.Request.Format` is mapped onto the provider's `response_format`:
+  `ai.FormatJSON` becomes `{"type":"json_object"}` and `ai.FormatJSONSchema`
+  becomes `{"type":"json_schema", ...}` with the schema, its name and the
+  strict flag. `Response.Format` reports `ai.FormatNative`, since this provider
+  enforces every shape it accepts. Until now only the native `ChatRequest`
+  could ask for JSON, so callers going through the provider-agnostic interface
+  had to strip code fences from the reply by hand.
+- Plain JSON mode also appends `ai.Format.Instruction()` to the system prompt.
+  The endpoint rejects `json_object` with a 400 unless the word "json" appears
+  in the messages; the caller's own system prompt is kept and the instruction
+  follows it. Schema mode has no such rule and leaves the prompt untouched.
+- `ImageData.Bytes` decodes the image the provider returned inline. It does no
+  I/O: an image delivered as a URL returns `ErrNoImageBytes` naming that URL.
+- Model constants `ModelGPTImage1`, `ModelDallE3`, `ModelDallE2` and the
+  `ImageFormatURL`/`ImageFormatB64JSON` values for `ImageRequest`.
+
+### Changed
+- `GenerateImage` fits the request to the model. The `gpt-image` family always
+  answers with base64 and rejects `response_format` outright, so the field is
+  dropped for those models when it asks for base64; asking one of them for a
+  URL now returns `ErrImageFormat` before the request is sent, instead of an
+  HTTP 400 from the provider or - worse - a reply whose `URL` is empty. Other
+  models are untouched, and the caller's own `ImageRequest` is never modified.
+- A nil `ImageRequest` returns `ErrNoImageRequest` instead of being sent as
+  `null`.
+
 ## [0.2.0] - 2026-07-12
 
 ### Added
