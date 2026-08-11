@@ -100,7 +100,16 @@ type toolAcc struct {
 }
 
 // Stream implements [ai.Client] over streaming chat completions.
+//
+// A request that asks for a hosted capability streams from the responses
+// endpoint instead, for the same reason [Client.Generate] does: it is the only
+// one that can run one. Splitting only Generate would leave a caller able to
+// search in one call and not the other, which is not a shared interface.
 func (c *Client) Stream(ctx context.Context, req *ai.Request) iter.Seq2[ai.Chunk, error] {
+	if req != nil && len(req.Hosted) > 0 {
+		return c.streamHosted(ctx, req)
+	}
+
 	return func(yield func(ai.Chunk, error) bool) {
 		cr, err := c.chatRequest(req, true)
 		if err != nil {

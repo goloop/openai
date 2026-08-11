@@ -138,7 +138,15 @@ func (c *Client) chatCompletion(ctx context.Context, req *ChatRequest) (*ChatRes
 // Generate implements [ai.Client] over chat completions. It returns the first
 // choice; to request and read several choices (n > 1) use the native
 // [Client.ChatCompletion], which exposes every choice.
+//
+// A request that asks for a hosted capability goes to the responses endpoint
+// instead, because that is the only one that can run one. What comes back is
+// the same shape either way; see the responses path for what is normalized.
 func (c *Client) Generate(ctx context.Context, req *ai.Request) (*ai.Response, error) {
+	if req != nil && len(req.Hosted) > 0 {
+		return c.generateHosted(ctx, req)
+	}
+
 	cr, err := c.chatRequest(req, false)
 	if err != nil {
 		return nil, err

@@ -21,6 +21,37 @@
 // prompt, because the endpoint rejects it unless the word "json" appears in
 // the messages.
 //
+// # Hosted web search
+//
+// ai.Request.Hosted maps onto this provider's hosted web search tool:
+//
+//	resp, err := c.Generate(ctx, &ai.Request{
+//	    Model:    openai.ModelGPT4oMini,
+//	    Messages: []ai.Message{ai.UserText("What shipped this week?")},
+//	    Hosted:   []ai.Hosted{{Kind: ai.HostedWebSearch}},
+//	})
+//	for _, c := range resp.Citations() { ... }
+//
+// That tool lives on the responses endpoint, not on chat completions, so
+// Generate and Stream go to the responses endpoint when, and only when, a
+// request asks for something hosted. Every other call sends the same bytes to
+// chat completions as it always did. The two endpoints do not describe an
+// outcome in the same words, so ai.Response.StopReason and ai.Usage are
+// normalized to the chat vocabulary and a caller never has to know which one
+// answered; ai.Response.Raw still holds what the endpoint actually said.
+//
+// Two things do not survive that endpoint. This provider filters by allowed
+// domains only, so ai.HostedWeb.BlockDomains and MaxUses are ai.ErrNoHosted;
+// so are ai.Request.Stop sequences, which the responses endpoint has no field
+// for and which are too load-bearing to drop quietly.
+//
+// The sources come back as ai.Citation values on the text they support. This
+// provider reports an index range but not what it counts in, so the range is
+// kept only where every plausible unit agrees, which is text that is entirely
+// ASCII; anywhere else the sources arrive without a range rather than with one
+// that might cut a word in half. A stream never carries a range, because the
+// indices are counted against an answer that has not finished arriving.
+//
 // # Images
 //
 // GenerateImage fits the request to the model: the gpt-image family always

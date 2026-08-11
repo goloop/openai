@@ -19,8 +19,55 @@ type ResponsesRequest struct {
 	Instructions    string   `json:"instructions,omitempty"`
 	MaxOutputTokens int      `json:"max_output_tokens,omitempty"`
 	Temperature     *float64 `json:"temperature,omitempty"`
+	TopP            *float64 `json:"top_p,omitempty"`
 	Store           *bool    `json:"store,omitempty"`
 	Stream          bool     `json:"stream,omitempty"`
+
+	// Tools carries both the caller's functions and the provider's own tools,
+	// such as web search. Without it this endpoint cannot be asked to search,
+	// which is the reason the shared path uses it at all.
+	Tools      []ResponseTool `json:"tools,omitempty"`
+	ToolChoice any            `json:"tool_choice,omitempty"`
+
+	// Text is where this endpoint takes the response format, unlike chat
+	// completions which takes a response_format of its own.
+	Text *ResponseText `json:"text,omitempty"`
+}
+
+// ResponseTool is one entry of the tools list. Type selects which of the
+// remaining fields apply: "function" uses Name, Description and Parameters,
+// while a provider-run tool such as "web_search" uses the fields below them.
+type ResponseTool struct {
+	Type string `json:"type"`
+
+	Name        string          `json:"name,omitempty"`
+	Description string          `json:"description,omitempty"`
+	Parameters  json.RawMessage `json:"parameters,omitempty"`
+
+	// Filters narrows a search, and UserLocation biases it.
+	Filters      *WebSearchFilters     `json:"filters,omitempty"`
+	UserLocation *ResponseUserLocation `json:"user_location,omitempty"`
+}
+
+// WebSearchFilters narrows a hosted search. This provider offers a list of
+// domains to keep and none to exclude.
+type WebSearchFilters struct {
+	AllowedDomains []string `json:"allowed_domains,omitempty"`
+}
+
+// ResponseUserLocation biases search results towards a place. Type is
+// "approximate".
+type ResponseUserLocation struct {
+	Type     string `json:"type"`
+	City     string `json:"city,omitempty"`
+	Region   string `json:"region,omitempty"`
+	Country  string `json:"country,omitempty"`
+	Timezone string `json:"timezone,omitempty"`
+}
+
+// ResponseText carries the response format for this endpoint.
+type ResponseText struct {
+	Format json.RawMessage `json:"format,omitempty"`
 }
 
 // ResponsesResponse is a responses API result.
@@ -33,15 +80,46 @@ type ResponsesResponse struct {
 		InputTokens  int `json:"input_tokens"`
 		OutputTokens int `json:"output_tokens"`
 	} `json:"usage"`
+
+	// IncompleteDetails says why a response stopped short, when it did.
+	IncompleteDetails *IncompleteDetails `json:"incomplete_details,omitempty"`
 }
 
-// ResponseOutput is one output item from the responses API.
+// IncompleteDetails says why a response stopped before it was finished.
+type IncompleteDetails struct {
+	Reason string `json:"reason,omitempty"`
+}
+
+// ResponseOutput is one output item from the responses API. Type selects which
+// fields apply: "message" carries Content, "function_call" carries CallID,
+// Name and Arguments, and a provider-run item such as "web_search_call"
+// records work this endpoint did on its own.
 type ResponseOutput struct {
-	Type    string `json:"type"`
-	Content []struct {
-		Type string `json:"type"`
-		Text string `json:"text"`
-	} `json:"content"`
+	Type      string            `json:"type"`
+	ID        string            `json:"id,omitempty"`
+	Status    string            `json:"status,omitempty"`
+	Role      string            `json:"role,omitempty"`
+	Content   []ResponseContent `json:"content,omitempty"`
+	CallID    string            `json:"call_id,omitempty"`
+	Name      string            `json:"name,omitempty"`
+	Arguments string            `json:"arguments,omitempty"`
+}
+
+// ResponseContent is one content part of a message output item.
+type ResponseContent struct {
+	Type        string               `json:"type"`
+	Text        string               `json:"text,omitempty"`
+	Annotations []ResponseAnnotation `json:"annotations,omitempty"`
+}
+
+// ResponseAnnotation marks a stretch of output text. A "url_citation" names a
+// source a hosted search used.
+type ResponseAnnotation struct {
+	Type       string `json:"type"`
+	URL        string `json:"url,omitempty"`
+	Title      string `json:"title,omitempty"`
+	StartIndex int    `json:"start_index,omitempty"`
+	EndIndex   int    `json:"end_index,omitempty"`
 }
 
 // Text returns the concatenation of the output's text segments.
@@ -89,6 +167,10 @@ type ResponseStreamEvent struct {
 	Response    *ResponsesResponse `json:"response"`
 	Message     string             `json:"message"`
 	Code        string             `json:"code"`
+
+	// Annotation carries one source, on a
+	// "response.output_text.annotation.added" event.
+	Annotation *ResponseAnnotation `json:"annotation,omitempty"`
 }
 
 // ResponseItem is an output item announced by a "response.output_item.added"
