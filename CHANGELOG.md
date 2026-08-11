@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.1] - 2026-08-11
+
+Patch release.
+
+### Documentation
+- The reference covers the driver's `Capabilities` and the translation of
+  model-level 400 refusals into `ai.ErrNoHosted`/`ai.ErrNoFormat`, which until
+  now lived only in the godoc.
+
 ## [1.1.0] - 2026-08-11
 
 Minor release, on `ai` v1.1.0.
