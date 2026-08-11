@@ -9,7 +9,6 @@ AI provider, and exposes OpenAI's native endpoints with their full options on
 top.
 
 ## Features
-
 - Chat completions: `Generate` for a single response, `Stream` for
   token-by-token output through `iter.Seq2`.
 - Tool use (function calling), multimodal image input and system prompts.
@@ -22,6 +21,9 @@ top.
   moderations, models, files and batches.
 - Retries on 429 and 5xx with backoff; normalized, typed API errors.
 - Depends only on `github.com/goloop/ai` and the standard library.
+- Hosted web search: `ai.Request.Hosted` routes to the responses endpoint,
+  which is where that tool lives, and normalizes the result back to the chat
+  vocabulary.
 
 ## Installation
 

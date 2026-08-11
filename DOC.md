@@ -12,6 +12,7 @@ Ukrainian version: **[DOC.UK.md](DOC.UK.md)**.
 - [Creating a client](#creating-a-client)
 - [Generate and Stream](#generate-and-stream)
 - [Structured output](#structured-output)
+- [Hosted web search](#hosted-web-search)
 - [Native chat completions](#native-chat-completions)
 - [Responses API](#responses-api)
 - [Embeddings](#embeddings)
@@ -281,6 +282,44 @@ out, err := c.FileContent(ctx, b.OutputFileID)
 batches, err := c.ListBatches(ctx)
 b, err = c.CancelBatch(ctx, b.ID)
 ```
+
+## Hosted web search
+
+`ai.Request.Hosted` maps onto this provider's hosted web search tool:
+
+```go
+resp, err := c.Generate(ctx, &ai.Request{
+	Model:    openai.ModelGPT4oMini,
+	Messages: []ai.Message{ai.UserText("What shipped this week?")},
+	Hosted:   []ai.Hosted{{Kind: ai.HostedWebSearch}},
+})
+for _, s := range resp.Citations() {
+	fmt.Println(s.Title, s.URL)
+}
+```
+
+That tool lives on the responses endpoint, not on chat completions. So
+`Generate` and `Stream` go to the responses endpoint when, and only when, a
+request asks for something hosted; every other call sends the same bytes to
+chat completions as it always did. The newer endpoint is worth reaching for
+what it adds, not worth re-routing every existing call through.
+
+The two endpoints do not describe an outcome in the same words, so
+`ai.Response.StopReason` and `ai.Usage` are normalized to the chat vocabulary
+and you never have to know which one answered. `ai.Response.Raw` still holds
+what the endpoint actually said, so nothing is hidden - only made comparable.
+
+Two things do not survive that endpoint. This provider filters by allowed
+domains only, so `ai.HostedWeb.BlockDomains` and `MaxUses` are `ai.ErrNoHosted`;
+so are `ai.Request.Stop` sequences, which the responses endpoint has no field
+for and which are too load-bearing to drop quietly.
+
+Sources arrive as `ai.Citation` values on the text they support. This provider
+reports an index range but not what it counts in, so the range is kept only
+where every plausible unit agrees - text that is entirely ASCII - and dropped
+anywhere else rather than risking a boundary mid-character. A stream never
+carries a range, because the indices are counted against an answer that has not
+finished arriving.
 
 ## Options and errors
 

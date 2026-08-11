@@ -5,6 +5,36 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.0] - 2026-08-11
+
+First stable release, on `ai` v1.0.0.
+
+### Added
+- `ai.Request.Hosted` maps onto the hosted web search tool. That tool lives on
+  the responses endpoint rather than chat completions, so `Generate` and
+  `Stream` go to the responses endpoint when, and only when, a request asks for
+  something hosted. Every other call sends the same bytes to the same endpoint
+  as before.
+- The two endpoints do not describe an outcome in the same words, so
+  `ai.Response.StopReason` and `ai.Usage` are normalized to the chat
+  vocabulary; `ai.Response.Raw` still holds what the endpoint actually said.
+- Sources come back as `ai.Citation` values on the text they support. The
+  provider reports an index range but not what it counts in, so the range is
+  kept only where every plausible unit agrees - text that is entirely ASCII -
+  and dropped elsewhere rather than risking a boundary mid-character. A stream
+  never carries a range.
+- `ai.Response.Hosted` reports whether the search ran and how many times.
+- `ResponsesRequest` gained `Tools`, `ToolChoice`, `Text` and `TopP`, without
+  which the endpoint could not be asked to search at all.
+- `ResponsesResponse` output items, content and annotations are now named types
+  carrying the fields a grounded answer uses.
+
+### Changed
+- On the hosted path the provider filters by allowed domains only, so
+  `ai.HostedWeb.BlockDomains` and `MaxUses` are `ai.ErrNoHosted`; so are
+  `ai.Request.Stop` sequences, which the responses endpoint has no field for
+  and which are too load-bearing to drop quietly.
+
 ## [0.3.0] - 2026-08-05
 
 ### Added
