@@ -1,2 +1,4 @@
 github.com/goloop/ai v1.0.0 h1:+lG+dwfd8F25G0BW6r0BOn0XiXA1pohWb1XHLOpbjCw=
 github.com/goloop/ai v1.0.0/go.mod h1:7uZ4LN96OaYwuVqrHyzjXSUTk4PV6c7fdH9OHvhAh7I=
+github.com/goloop/ai v1.1.0 h1:Yi9zRDQmIlAVhjOVvPrcfCTWainmLTadDNipYqkusTU=
+github.com/goloop/ai v1.1.0/go.mod h1:7uZ4LN96OaYwuVqrHyzjXSUTk4PV6c7fdH9OHvhAh7I=

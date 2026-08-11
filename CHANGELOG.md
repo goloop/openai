@@ -5,6 +5,29 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0] - 2026-08-11
+
+Minor release, on `ai` v1.1.0.
+
+### Added
+- `Capabilities` describes what this driver can be asked for: which hosted
+  capabilities it runs, which `ai.HostedWeb` settings it can express, and
+  whether a search survives in the same call as a structured format. It is a
+  hint for the decision taken before a call, never a substitute for handling
+  `ai.ErrNoHosted` - support also depends on the model, the account and the
+  region. A test pins the table against what the driver actually refuses, so
+  it stays honest mechanically rather than by discipline.
+- Web search is reported with the settings the responses endpoint actually
+  takes: allowed domains and a region, no use limit and no block list. A search
+  and a schema fit in one call there, and `WithFormat` says so.
+- A provider refusal that means "this model cannot do that" is now translated
+  into the matching sentinel, so an application degrades with one `errors.Is`
+  whether the driver knew in advance or learned from a 400. The provider's own
+  `ai.APIError` is wrapped, not replaced, and stays reachable with `errors.As`.
+  The rules are deliberately narrow - only a 400, only a capability the caller
+  asked for, only an error naming that exact feature - because mistaking a
+  genuinely bad request for a missing feature would retry it forever.
+
 ## [1.0.0] - 2026-08-11
 
 First stable release, on `ai` v1.0.0.

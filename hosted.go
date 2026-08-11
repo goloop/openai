@@ -398,7 +398,7 @@ func (c *Client) generateHosted(
 		return nil, err
 	}
 	if status != http.StatusOK {
-		return nil, parseError(status, data)
+		return nil, wrapUnsupportedCapability(req, parseError(status, data))
 	}
 
 	var out ResponsesResponse
@@ -435,7 +435,7 @@ func (c *Client) streamHosted(
 
 		for ev, err := range c.ResponsesStream(ctx, rr) {
 			if err != nil {
-				yield(ai.Chunk{}, err)
+				yield(ai.Chunk{}, wrapUnsupportedCapability(req, err))
 				return
 			}
 
