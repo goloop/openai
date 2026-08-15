@@ -224,6 +224,17 @@ Asking a `gpt-image` model for a URL fails here rather than succeeding with an
 empty `URL` field, so the incompatibility is not something to rediscover by
 trial and error. Your own `ImageRequest` value is never modified.
 
+The `gpt-image` family also accepts `Background`, `OutputFormat` (`png`/`jpeg`/
+`webp` - webp and jpeg are smaller and quicker than the png default),
+`OutputCompression` (a `*int`, so `0` is distinct from unset) and `Moderation`.
+These belong to `gpt-image` only, so setting one on a `dall-e` model is
+`ErrImageFormat` before the call, naming the field to remove.
+
+`ImageResponse.Usage` carries the tokens a `gpt-image` request billed, split by
+`input_tokens_details` into text and image tokens. It is a `*ImageUsage`: `nil`
+means the provider did not report usage (dall-e never does), which is distinct
+from a zero count.
+
 ## Audio
 
 ```go

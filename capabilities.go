@@ -34,6 +34,8 @@ func (c *Client) Capabilities() ai.Capabilities {
 
 	return ai.Capabilities{
 		Format: native,
+		// GenerateImage draws through the images endpoint (gpt-image, dall-e).
+		Images: true,
 		Hosted: map[ai.HostedKind]ai.HostedCapability{
 			ai.HostedWebSearch: {
 				Web: &ai.HostedWebCapability{

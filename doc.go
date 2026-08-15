@@ -56,8 +56,12 @@
 //
 // GenerateImage fits the request to the model: the gpt-image family always
 // answers with base64 and rejects response_format, so asking one of those
-// models for a URL is refused here rather than by the provider. ImageData.Bytes
-// returns the image itself.
+// models for a URL is refused here rather than by the provider. The gpt-image
+// family's own fields (Background, OutputFormat, OutputCompression, Moderation)
+// are likewise refused on a dall-e model, before the request is sent, naming
+// the field to remove. ImageData.Bytes returns the image itself, and
+// ImageResponse.Usage carries the token cost gpt-image reports (nil for dall-e,
+// which reports none).
 //
 // # Asking what this driver can do
 //

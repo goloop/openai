@@ -49,6 +49,27 @@ type ImageRequest struct {
 	// [Client.GenerateImage] for what happens then.
 	ResponseFormat string `json:"response_format,omitempty"`
 
+	// The fields below belong to the gpt-image family only. dall-e models do
+	// not accept them, so setting one on a dall-e model is [ErrImageFormat]
+	// before the request is sent - the same fail-early treatment
+	// ResponseFormat gets - rather than a provider rejection with a less
+	// helpful message. Empty means the provider's own default.
+	//
+	// Background is "transparent", "opaque" or "auto".
+	Background string `json:"background,omitempty"`
+
+	// OutputFormat is "png" (the default), "jpeg" or "webp". webp and jpeg
+	// are smaller on disk and quicker to return than png.
+	OutputFormat string `json:"output_format,omitempty"`
+
+	// OutputCompression is the compression level (0-100) for jpeg and webp.
+	// It is a pointer because 0 is a meaningful value - no compression - and
+	// has to be distinguishable from "not set".
+	OutputCompression *int `json:"output_compression,omitempty"`
+
+	// Moderation is "low" or "auto".
+	Moderation string `json:"moderation,omitempty"`
+
 	User string `json:"user,omitempty"`
 }
 
@@ -56,6 +77,27 @@ type ImageRequest struct {
 type ImageResponse struct {
 	Created int64       `json:"created"`
 	Data    []ImageData `json:"data"`
+
+	// Usage reports the tokens an image request consumed. gpt-image returns
+	// it; dall-e does not, so it is a pointer - a nil Usage is "the provider
+	// did not report it", distinct from a zero count. Image generation is
+	// billed apart from text, and this is the only place its cost shows up.
+	Usage *ImageUsage `json:"usage,omitempty"`
+}
+
+// ImageUsage reports the tokens an image request consumed.
+type ImageUsage struct {
+	TotalTokens        int                      `json:"total_tokens"`
+	InputTokens        int                      `json:"input_tokens"`
+	OutputTokens       int                      `json:"output_tokens"`
+	InputTokensDetails *ImageInputTokensDetails `json:"input_tokens_details,omitempty"`
+}
+
+// ImageInputTokensDetails splits the input tokens between the text prompt and
+// any input images, which is where the cost of an edit or variation lands.
+type ImageInputTokensDetails struct {
+	TextTokens  int `json:"text_tokens"`
+	ImageTokens int `json:"image_tokens"`
 }
 
 // ImageData is one generated image, as a URL or base64 JSON.
@@ -108,6 +150,17 @@ func imagePayload(req *ImageRequest) (*ImageRequest, error) {
 	if req == nil {
 		return nil, ErrNoImageRequest
 	}
+
+	// The gpt-image-only fields are rejected on a model that cannot accept
+	// them, before the network. Silently dropping them would turn a caller's
+	// webp request into a png without a word; refusing says why.
+	if !inlineOnly(req.Model) {
+		if field := gptImageOnlyField(req); field != "" {
+			return nil, fmt.Errorf("%w: %s does not accept %s",
+				ErrImageFormat, modelName(req.Model), field)
+		}
+	}
+
 	if !inlineOnly(req.Model) || req.ResponseFormat == "" {
 		return req, nil
 	}
@@ -119,6 +172,33 @@ func imagePayload(req *ImageRequest) (*ImageRequest, error) {
 	out := *req
 	out.ResponseFormat = ""
 	return &out, nil
+}
+
+// gptImageOnlyField returns the name of a gpt-image-only field the request
+// sets, or "" if it sets none. It exists so the refusal above can name the
+// exact field the caller has to remove.
+func gptImageOnlyField(req *ImageRequest) string {
+	switch {
+	case req.Background != "":
+		return "background"
+	case req.OutputFormat != "":
+		return "output_format"
+	case req.OutputCompression != nil:
+		return "output_compression"
+	case req.Moderation != "":
+		return "moderation"
+	default:
+		return ""
+	}
+}
+
+// modelName renders the model for an error message, naming the default when the
+// caller left it empty.
+func modelName(model string) string {
+	if model == "" {
+		return "the default model"
+	}
+	return model
 }
 
 // inlineOnly reports whether a model always returns image bytes inline and

@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2026-08-15
+
+Minor release: image usage, the newer gpt-image parameters, and the image
+capability hint. Additive.
+
+### Added
+- `ImageResponse.Usage` (`*ImageUsage`) carries the tokens a gpt-image request
+  billed, split by `input_tokens_details` into text and image tokens. Until now
+  the response dropped the `usage` block, so cost tracking was blind to images -
+  the most expensive half of the cycle. It is a pointer: `nil` is "the provider
+  did not report it" (dall-e never does), distinct from a zero count.
+- `ImageRequest` gains the gpt-image-only fields `Background`, `OutputFormat`
+  (png/jpeg/webp), `OutputCompression` (a `*int`, so `0` is distinct from unset)
+  and `Moderation`. Empty behaves exactly as before. Setting one on a dall-e
+  model is `ErrImageFormat` before the request is sent, naming the field to
+  remove - the same fail-early treatment `ResponseFormat` already gets.
+- `Capabilities.Images` is true: a UI can ask `ai.SupportsImages(client)` to
+  decide whether to offer image generation.
+
 ## [1.1.1] - 2026-08-11
 
 Patch release.
