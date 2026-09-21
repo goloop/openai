@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -185,6 +186,7 @@ func TestConversationIsRenderedForTheResponsesEndpoint(t *testing.T) {
 		Model:  "the-model",
 		System: "Be terse.",
 		Messages: []ai.Message{
+			ai.SystemText("Answer in French."),
 			ai.UserText("hi"),
 			{Role: ai.RoleAssistant, Parts: []ai.Part{
 				ai.Text{Text: "one moment"},
@@ -211,12 +213,60 @@ func TestConversationIsRenderedForTheResponsesEndpoint(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, want := range []string{
+		`"role":"system"`, `"content":"Answer in French."`,
 		`"input_text"`, `"output_text"`,
 		`"function_call"`, `"call_id":"call_1"`,
 		`"function_call_output"`, `"output":"42"`,
 	} {
 		if !strings.Contains(string(body), want) {
 			t.Errorf("input does not carry %s: %s", want, body)
+		}
+	}
+	// The system message keeps its place: before the user turn it precedes.
+	if strings.Index(string(body), "Answer in French.") > strings.Index(string(body), `"hi"`) {
+		t.Errorf("system message lost its place in the conversation: %s", body)
+	}
+}
+
+// Turning on a hosted capability must not change which instructions reach
+// the model: a system message the chat path sends is sent by the responses
+// path too, for Generate and Stream alike.
+func TestHostedKeepsSystemMessages(t *testing.T) {
+	var bodies [][]byte
+	c, done := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		bodies = append(bodies, body)
+		if strings.Contains(string(body), `"stream":true`) {
+			io.WriteString(w, `data: {"type":"response.completed","response":{"status":"completed","output":[],"usage":{"input_tokens":1,"output_tokens":1}}}`+"\n\n")
+			return
+		}
+		io.WriteString(w, searchReply)
+	})
+	defer done()
+
+	req := &ai.Request{
+		Model: "the-model",
+		Messages: []ai.Message{
+			ai.SystemText("SYSTEM_SENTINEL"),
+			ai.UserText("hello"),
+		},
+		Hosted: []ai.Hosted{{Kind: ai.HostedWebSearch}},
+	}
+	if _, err := c.Generate(context.Background(), req); err != nil {
+		t.Fatal(err)
+	}
+	for _, err := range c.Stream(context.Background(), req) {
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if len(bodies) != 2 {
+		t.Fatalf("got %d requests, want 2", len(bodies))
+	}
+	for i, body := range bodies {
+		if !strings.Contains(string(body), "SYSTEM_SENTINEL") {
+			t.Errorf("request %d dropped the system message: %s", i, body)
 		}
 	}
 }

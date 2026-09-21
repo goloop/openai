@@ -5,6 +5,31 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.1] - 2026-09-21
+
+Patch release.
+
+### Fixed
+- A request with a hosted capability no longer loses its system messages.
+  `Generate` and `Stream` switch to the responses endpoint when `Hosted` is
+  set, and that path built its instructions from `Request.System` alone while
+  dropping every message with `RoleSystem` from the input, so the rules an
+  application had set through `ai.SystemText` vanished the moment web search
+  was turned on. A system message now travels as a system item in its place
+  in the conversation, exactly as the chat path sends it.
+- `Stream` over chat completions no longer hands out the tool calls a cut-off
+  stream left open. A stream that ended without a `[DONE]` sentinel was
+  already reported as `io.ErrUnexpectedEOF`, but only after the open tool
+  calls had been yielded with whatever arguments had arrived, so a tool loop
+  could run an action the model never finished before it saw the error. The
+  error now comes first and no open call is handed out. A `finish_reason`
+  counts as a proper ending on its own, so a stream that loses only the
+  trailing sentinel is not reported as broken.
+
+### Changed
+- Depends on `ai` v1.2.1, whose `SSEEvents` bounds the size of one event, so a
+  stream that never ends an event cannot make the reader grow without limit.
+
 ## [1.2.0] - 2026-08-15
 
 Minor release: image usage, the newer gpt-image parameters, and the image

@@ -150,7 +150,10 @@ func (c *Client) Stream(ctx context.Context, req *ai.Request) iter.Seq2[ai.Chunk
 			return true
 		}
 
-		sawDone := false
+		// The stream ends properly with a [DONE] sentinel or, at the least, a
+		// finish_reason on a choice; anything else is a stream that was cut
+		// off.
+		sawDone, sawFinish := false, false
 		for data, err := range ai.SSEEvents(resp.Body) {
 			if err != nil {
 				yield(ai.Chunk{}, err)
@@ -174,6 +177,9 @@ func (c *Client) Stream(ctx context.Context, req *ai.Request) iter.Seq2[ai.Chunk
 			}
 
 			for _, choice := range chunk.Choices {
+				if choice.FinishReason != "" {
+					sawFinish = true
+				}
 				if choice.Delta.Content != "" {
 					if !yield(ai.Chunk{Text: choice.Delta.Content, Raw: json.RawMessage(data)}, nil) {
 						return
@@ -202,19 +208,21 @@ func (c *Client) Stream(ctx context.Context, req *ai.Request) iter.Seq2[ai.Chunk
 			}
 		}
 
-		// Flush any tool calls the stream did not close with a
-		// finish_reason (truncated streams, gateways that omit it). A false
-		// return means the consumer stopped or a tool call had invalid JSON
-		// arguments; either way the stream is done.
-		if !flushTools() {
+		// A stream that ended without either marker was truncated: the text
+		// may be incomplete and the usage partial, so report it rather than
+		// presenting a cut-off result as complete. Tool calls it left open
+		// are not handed out either; their arguments may be cut off too, and
+		// a tool loop must not run an action the model never finished.
+		if !sawDone && !sawFinish {
+			yield(ai.Chunk{}, io.ErrUnexpectedEOF)
 			return
 		}
 
-		// A stream that ended without a [DONE] sentinel was truncated: the
-		// text or tool arguments may be incomplete and the usage partial, so
-		// report it rather than presenting a cut-off result as complete.
-		if !sawDone {
-			yield(ai.Chunk{}, io.ErrUnexpectedEOF)
+		// Flush any tool calls the stream closed without a finish_reason of
+		// "tool_calls" (gateways that omit it). A false return means the
+		// consumer stopped or a tool call had invalid JSON arguments; either
+		// way the stream is done.
+		if !flushTools() {
 			return
 		}
 

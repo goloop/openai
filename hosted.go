@@ -164,16 +164,20 @@ func hostedTools(req *ai.Request) ([]ResponseTool, error) {
 	return out, nil
 }
 
-// responsesInput builds the input list for this endpoint. System messages are
-// not part of it: they are folded into Instructions, the same way the chat
-// path folds them into a system message.
+// responsesInput builds the input list for this endpoint. A system message
+// travels as a system item in its place in the conversation, exactly as the
+// chat path sends it, so that turning on a hosted capability never changes
+// which instructions the model sees. Only req.System goes to Instructions.
 func responsesInput(req *ai.Request) []any {
 	var out []any
 
 	for _, m := range req.Messages {
 		switch m.Role {
 		case ai.RoleSystem:
-			continue
+			out = append(out, map[string]any{
+				"role":    "system",
+				"content": partsText(m.Parts),
+			})
 		case ai.RoleTool:
 			for _, p := range m.Parts {
 				if tr, ok := p.(ai.ToolResult); ok {
