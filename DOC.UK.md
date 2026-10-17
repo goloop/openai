@@ -242,6 +242,11 @@ audio, err := c.Speech(ctx, &openai.SpeechRequest{
 })
 ```
 
+`Instructions` керує подачею - тоном, акцентом, темпом - звичайними словами
+(`Instructions: "Speak slowly, like a patient teacher"`). Працює з
+`gpt-4o-mini-tts`; `tts-1` і `tts-1-hd` його не підтримують, і драйвер лишає
+це рішення API. Порожнє поле не надсилається.
+
 `Speech` повертає сирі байти аудіо, прочитані під жорсткою стелею; для довгого
 вводу бери `SpeechTo(ctx, req, w)`, щоб стрімити аудіо в `io.Writer` без
 буферизації в пам'яті. Так само `FileContentTo(ctx, id, w)` стрімить
@@ -363,3 +368,7 @@ if errors.As(err, &apiErr) && apiErr.Status == http.StatusTooManyRequests {
 
 Запити без моделі чи повідомлень падають до мережі з `ai.ErrNoModel` або
 `ai.ErrNoMessages`.
+
+## Реліз v1.3.0
+
+Transcribe і Translate з форматами text, srt та vtt зберігають відповідь дослівно, навіть якщо вона схожа на JSON. ResponsesResponse.Text зменшує копіювання. SpeechRequest.Instructions задає інструкції озвучення для моделей, які їх підтримують.

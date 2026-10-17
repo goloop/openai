@@ -249,6 +249,11 @@ audio, err := c.Speech(ctx, &openai.SpeechRequest{
 })
 ```
 
+`Instructions` steers the delivery - tone, accent, pace - in plain words
+(`Instructions: "Speak slowly, like a patient teacher"`). It works with
+`gpt-4o-mini-tts`; `tts-1` and `tts-1-hd` do not support it, and the driver
+leaves that verdict to the API. Empty omits it.
+
 `Speech` returns the raw audio bytes, read under a hard ceiling; for a long
 input use `SpeechTo(ctx, req, w)` to stream the audio to an `io.Writer` without
 buffering it in memory. Likewise `FileContentTo(ctx, id, w)` streams a file
@@ -372,3 +377,7 @@ if errors.As(err, &apiErr) && apiErr.Status == http.StatusTooManyRequests {
 
 Requests missing a model or messages fail before the network with
 `ai.ErrNoModel` or `ai.ErrNoMessages`.
+
+## Release v1.3.0
+
+Preserve plain transcripts, reduce response text allocations, and support speech instructions.

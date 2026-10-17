@@ -2,6 +2,7 @@ package openai
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"net/http"
 	"strings"
@@ -92,6 +93,49 @@ func TestSpeech(t *testing.T) {
 	}
 	if len(audio) != 3 {
 		t.Errorf("audio len = %d", len(audio))
+	}
+}
+
+func TestSpeechInstructions(t *testing.T) {
+	tests := []struct {
+		name         string
+		instructions string
+	}{
+		{"set", "Speak slowly, like a patient teacher."},
+		{"empty", ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var body map[string]any
+			c, done := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+				if !strings.HasSuffix(r.URL.Path, "/audio/speech") {
+					t.Errorf("path = %q", r.URL.Path)
+				}
+				if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+					t.Errorf("decode body: %v", err)
+				}
+				w.Write([]byte{0x49, 0x44, 0x33})
+			})
+			defer done()
+
+			_, err := c.Speech(context.Background(), &SpeechRequest{
+				Model: "gpt-4o-mini-tts", Input: "hello", Voice: "alloy",
+				Instructions: tt.instructions,
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			got, ok := body["instructions"]
+			if tt.instructions == "" {
+				if ok {
+					t.Errorf("instructions = %v, want omitted", got)
+				}
+				return
+			}
+			if got != tt.instructions {
+				t.Errorf("instructions = %v, want %q", got, tt.instructions)
+			}
+		})
 	}
 }
 

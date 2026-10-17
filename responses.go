@@ -124,7 +124,22 @@ type ResponseAnnotation struct {
 
 // Text returns the concatenation of the output's text segments.
 func (r *ResponsesResponse) Text() string {
+	var single string
+	count, size := 0, 0
+	for _, o := range r.Output {
+		for _, ct := range o.Content {
+			if ct.Type == "output_text" && ct.Text != "" {
+				single = ct.Text
+				count++
+				size += len(ct.Text)
+			}
+		}
+	}
+	if count <= 1 {
+		return single
+	}
 	var b strings.Builder
+	b.Grow(size)
 	for _, o := range r.Output {
 		for _, ct := range o.Content {
 			if ct.Type == "output_text" {

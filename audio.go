@@ -61,6 +61,10 @@ func (c *Client) audioText(
 		return "", err
 	}
 
+	if req.Format == "text" || req.Format == "srt" || req.Format == "vtt" {
+		return string(data), nil
+	}
+
 	var out struct {
 		Text string `json:"text"`
 	}
@@ -72,12 +76,18 @@ func (c *Client) audioText(
 }
 
 // SpeechRequest turns text into speech.
+//
+// Instructions steers the delivery - tone, accent, pace - in plain words (for
+// example "Speak slowly, like a patient teacher"). It is honored by
+// gpt-4o-mini-tts; tts-1 and tts-1-hd do not support it, and the driver leaves
+// that verdict to the API rather than rejecting it here. Empty omits it.
 type SpeechRequest struct {
-	Model  string  `json:"model"`
-	Input  string  `json:"input"`
-	Voice  string  `json:"voice"`
-	Format string  `json:"response_format,omitempty"`
-	Speed  float64 `json:"speed,omitempty"`
+	Model        string  `json:"model"`
+	Input        string  `json:"input"`
+	Voice        string  `json:"voice"`
+	Instructions string  `json:"instructions,omitempty"`
+	Format       string  `json:"response_format,omitempty"`
+	Speed        float64 `json:"speed,omitempty"`
 }
 
 // SpeechTo synthesizes audio for the given text and writes it to w, streaming

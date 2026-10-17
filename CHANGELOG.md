@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] - 2026-10-18
+
+### Fixed
+- Preserve plain transcripts that contain JSON text.
+- Reduce allocations when collecting response text.
+
+Minor release: speech instructions. Additive.
+
+### Added
+- `SpeechRequest.Instructions` is sent as `instructions` and steers the
+  delivery of the synthesized speech - tone, accent, pace - in plain words.
+  gpt-4o-mini-tts honors it; tts-1 and tts-1-hd do not support it, and the
+  driver does not reject it for them but leaves that verdict to the API.
+  Empty omits the field, so existing requests are sent exactly as before.
+
 ## [1.2.1] - 2026-09-21
 
 Patch release.

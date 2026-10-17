@@ -1,4 +1,4 @@
-[![deps.dev](https://img.shields.io/badge/deps.dev-insights-4c8dbc)](https://deps.dev/go/github.com%2Fgoloop%2Fopenai) [![License](https://img.shields.io/badge/license-MIT-brightgreen)](https://github.com/goloop/openai/blob/master/LICENSE) [![License](https://img.shields.io/badge/godoc-YES-green)](https://pkg.go.dev/github.com/goloop/openai) [![Stay with Ukraine](https://img.shields.io/static/v1?label=Stay%20with&message=Ukraine%20♥&color=ffD700&labelColor=0057B8&style=flat)](https://u24.gov.ua/)
+[![deps.dev](https://img.shields.io/badge/deps.dev-insights-4c8dbc)](https://deps.dev/go/github.com%2Fgoloop%2Fopenai) [![License](https://img.shields.io/badge/license-MIT-brightgreen)](https://github.com/goloop/openai/blob/v1/LICENSE) [![License](https://img.shields.io/badge/godoc-YES-green)](https://pkg.go.dev/github.com/goloop/openai) [![Stay with Ukraine](https://img.shields.io/static/v1?label=Stay%20with&message=Ukraine%20♥&color=ffD700&labelColor=0057B8&style=flat)](https://u24.gov.ua/)
 
 
 # openai
@@ -130,3 +130,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md).
 ## License
 
 MIT - see [LICENSE](LICENSE).
+
+## Release v1.3.0
+
+Preserve plain transcripts, reduce response text allocations, and support speech instructions.
