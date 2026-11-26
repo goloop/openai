@@ -372,3 +372,7 @@ if errors.As(err, &apiErr) && apiErr.Status == http.StatusTooManyRequests {
 ## Реліз v1.3.0
 
 Transcribe і Translate з форматами text, srt та vtt зберігають відповідь дослівно, навіть якщо вона схожа на JSON. ResponsesResponse.Text зменшує копіювання. SpeechRequest.Instructions задає інструкції озвучення для моделей, які їх підтримують.
+
+## Поведінка запиту
+
+Після заголовків читання потоку обмежує контекст запиту. Задайте дедлайн, якщо потрібно обмежити всю взаємодію.

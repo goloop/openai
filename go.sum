@@ -4,3 +4,5 @@ github.com/goloop/ai v1.2.1 h1:4dmEzyqyDL9rKpmi5SYIeKcOH6v5wCNrWq7owlFX4FA=
 github.com/goloop/ai v1.2.1/go.mod h1:7uZ4LN96OaYwuVqrHyzjXSUTk4PV6c7fdH9OHvhAh7I=
 github.com/goloop/ai v1.2.3-0.20261126060531-8f1082460dd1 h1:Rt31nXv5ki1a3T8lJ4Rm5VoXJb0Z6jP9BdNE0Rm8PHw=
 github.com/goloop/ai v1.2.3-0.20261126060531-8f1082460dd1/go.mod h1:7uZ4LN96OaYwuVqrHyzjXSUTk4PV6c7fdH9OHvhAh7I=
+github.com/goloop/ai v1.3.0 h1:MYypRiKlEUXVJFgGWgyXhCwJHKNYeixy8O/OXic97jE=
+github.com/goloop/ai v1.3.0/go.mod h1:7uZ4LN96OaYwuVqrHyzjXSUTk4PV6c7fdH9OHvhAh7I=

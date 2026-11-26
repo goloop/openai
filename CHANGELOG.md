@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Keep long responses streaming and check completion data.
 
+Use the released streaming core.
+
 ## [1.3.0] - 2026-10-18
 
 ### Fixed

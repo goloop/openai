@@ -381,3 +381,7 @@ Requests missing a model or messages fail before the network with
 ## Release v1.3.0
 
 Preserve plain transcripts, reduce response text allocations, and support speech instructions.
+
+## Request behavior
+
+The shared stream uses the request context to bound reading after the response headers arrive. Configure a deadline if the caller needs one.
