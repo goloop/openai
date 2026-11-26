@@ -48,7 +48,7 @@ func (c *Client) openStream(ctx context.Context, req *ChatRequest) (*http.Respon
 	}
 	h := c.headers()
 	h.Set("accept", "text/event-stream")
-	resp, err := c.opts.Do(ctx, http.MethodPost, c.opts.BaseURL+"/chat/completions", body, h)
+	resp, err := c.opts.DoStream(ctx, http.MethodPost, c.opts.BaseURL+"/chat/completions", body, h)
 	if err != nil {
 		return nil, err
 	}

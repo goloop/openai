@@ -213,7 +213,7 @@ func (c *Client) openResponsesStream(ctx context.Context, req *ResponsesRequest)
 	}
 	h := c.headers()
 	h.Set("accept", "text/event-stream")
-	resp, err := c.opts.Do(ctx, http.MethodPost, c.opts.BaseURL+"/responses", body, h)
+	resp, err := c.opts.DoStream(ctx, http.MethodPost, c.opts.BaseURL+"/responses", body, h)
 	if err != nil {
 		return nil, err
 	}

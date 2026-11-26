@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strings"
 
@@ -155,7 +156,10 @@ func (c *Client) Generate(ctx context.Context, req *ai.Request) (*ai.Response, e
 	if err != nil {
 		return nil, wrapUnsupportedCapability(req, err)
 	}
-	resp := chatToResponse(out)
+	resp, err := chatToResponse(out)
+	if err != nil {
+		return nil, err
+	}
 	resp.Raw = raw
 	resp.Format = formatMode(req.Format)
 	return resp, nil
@@ -385,7 +389,7 @@ func chatToolChoice(tc ai.ToolChoice) any {
 	}
 }
 
-func chatToResponse(cr *ChatResponse) *ai.Response {
+func chatToResponse(cr *ChatResponse) (*ai.Response, error) {
 	resp := &ai.Response{
 		Model: cr.Model,
 		Usage: ai.Usage{
@@ -394,7 +398,7 @@ func chatToResponse(cr *ChatResponse) *ai.Response {
 		},
 	}
 	if len(cr.Choices) == 0 {
-		return resp
+		return resp, nil
 	}
 	ch := cr.Choices[0]
 	resp.StopReason = ch.FinishReason
@@ -402,11 +406,18 @@ func chatToResponse(cr *ChatResponse) *ai.Response {
 		resp.Parts = append(resp.Parts, ai.Text{Text: s})
 	}
 	for _, tc := range ch.Message.ToolCalls {
+		args := tc.Function.Arguments
+		if args == "" {
+			args = "{}"
+		}
+		if !json.Valid([]byte(args)) {
+			return nil, fmt.Errorf("invalid JSON arguments for tool %q", tc.Function.Name)
+		}
 		resp.Parts = append(resp.Parts, ai.ToolUse{
 			ID:    tc.ID,
 			Name:  tc.Function.Name,
-			Input: json.RawMessage(tc.Function.Arguments),
+			Input: json.RawMessage(args),
 		})
 	}
-	return resp
+	return resp, nil
 }
